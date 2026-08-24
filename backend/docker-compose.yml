@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: dashboard_db
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    ports:
+      - '6379:6379'
+
+  backend:
+    build: .
+    restart: always
+    ports:
+      - '4000:4000'
+    environment:
+      - DATABASE_URL=postgresql://user:password@postgres:5432/dashboard_db
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=supersecretjwt
+      - JWT_REFRESH_SECRET=supersecretrefreshjwt
+      - PORT=4000
+    depends_on:
+      - postgres
+      - redis
+
+volumes:
+  postgres_data:
