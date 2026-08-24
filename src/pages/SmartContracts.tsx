@@ -6,7 +6,6 @@ import {
   CheckCircle2,
   Rocket,
 } from 'lucide-react';
-
 import StatCard from '../components/StatCard';
 import ContractFilterBar from '../components/contracts/ContractFilterBar';
 import ContractTable from '../components/contracts/ContractTable';

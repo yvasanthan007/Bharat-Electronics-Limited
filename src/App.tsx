@@ -32,22 +32,30 @@ function App() {
     <BrowserRouter>
       <Routes>
 
+        {/* Login */}
         <Route path="/" element={<Navigate to="/login" replace />} />
 
         <Route path="/login" element={<Login />} />
 
+        {/* Main BEL Application */}
         <Route path="/bel" element={<BelLayout />}>
           <Route index element={<Dashboard />} />
 
+          {/* Existing pages */}
           <Route path="digital-assets" element={<DigitalAssets />} />
           <Route path="transactions" element={<Transactions />} />
           <Route path="identities" element={<Identities />} />
           <Route path="access-control" element={<AccessControl />} />
-          <Route path="smart-contracts" element={<SmartContracts />} />
-          <Route path="audit-trail" element={<AuditTrail />} />
+
+          {/* Reports & Settings */}
           <Route path="reports" element={<Reports />} />
           <Route path="settings" element={<Settings />} />
 
+          {/* New pages */}
+          <Route path="audit-trail" element={<AuditTrail />} />
+          <Route path="smart-contracts" element={<SmartContracts />} />
+
+          {/* Unknown route */}
           <Route
             path="*"
             element={
@@ -59,13 +67,40 @@ function App() {
         </Route>
 
         {/* Legacy redirects */}
-        <Route path="/dashboard" element={<Navigate to="/bel" replace />} />
-        <Route path="/reports" element={<Navigate to="/bel/reports" replace />} />
-        <Route path="/settings" element={<Navigate to="/bel/settings" replace />} />
-        <Route path="/identities" element={<Navigate to="/bel/identities" replace />} />
-        <Route path="/access-control" element={<Navigate to="/bel/access-control" replace />} />
-        <Route path="/smart-contracts" element={<Navigate to="/bel/smart-contracts" replace />} />
-        <Route path="/audit-trail" element={<Navigate to="/bel/audit-trail" replace />} />
+        <Route
+          path="/dashboard"
+          element={<Navigate to="/bel" replace />}
+        />
+
+        <Route
+          path="/reports"
+          element={<Navigate to="/bel/reports" replace />}
+        />
+
+        <Route
+          path="/settings"
+          element={<Navigate to="/bel/settings" replace />}
+        />
+
+        <Route
+          path="/identities"
+          element={<Navigate to="/bel/identities" replace />}
+        />
+
+        <Route
+          path="/access-control"
+          element={<Navigate to="/bel/access-control" replace />}
+        />
+
+        <Route
+          path="/smart-contracts"
+          element={<Navigate to="/bel/smart-contracts" replace />}
+        />
+
+        <Route
+          path="/audit-trail"
+          element={<Navigate to="/bel/audit-trail" replace />}
+        />
 
         <Route
           path="/dashboard/reports"
