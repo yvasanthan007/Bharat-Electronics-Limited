@@ -1,11 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
-  FileText,
   Plus,
   Clock,
   Download,
   BarChart3,
   RefreshCw,
+  LayoutGrid,
+  Table as TableIcon,
+  Search
 } from 'lucide-react';
 import {
   getReports,
@@ -23,6 +25,7 @@ import type {
 import ReportStatsCards from '../components/reports/ReportStatsCards';
 import ReportsOverviewCharts from '../components/reports/ReportsOverviewCharts';
 import ReportsTable from '../components/reports/ReportsTable';
+import ReportVisualCards from '../components/reports/ReportVisualCards';
 import ReportDrawer from '../components/reports/ReportDrawer';
 import GenerateReportModal from '../components/reports/GenerateReportModal';
 import ScheduledReportsSection from '../components/reports/ScheduledReportsSection';
@@ -36,7 +39,9 @@ export default function Reports() {
   const [stats, setStats] = useState<ReportStats | null>(null);
   const [schedules, setSchedules] = useState<ScheduledReport[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'all' | 'scheduled'>('all');
+  const [activeTab, setActiveTab] = useState<'analytics' | 'cards' | 'table' | 'scheduled'>('analytics');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('All');
   
   // Drawer & Modal States
   const [selectedReport, setSelectedReport] = useState<ReportItem | null>(null);
@@ -146,6 +151,20 @@ export default function Reports() {
     }
   };
 
+  const filteredReports = useMemo(() => {
+    return reports.filter((r) => {
+      const matchesSearch =
+        r.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        r.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        r.generatedBy.toLowerCase().includes(searchTerm.toLowerCase());
+
+      const matchesCategory =
+        selectedCategory === 'All' || r.category === selectedCategory;
+
+      return matchesSearch && matchesCategory;
+    });
+  }, [reports, searchTerm, selectedCategory]);
+
   return (
     <div className="max-w-[1600px] mx-auto space-y-6 pb-12 animate-in fade-in duration-200">
       {/* Toast Notification Container */}
@@ -159,7 +178,7 @@ export default function Reports() {
             <Badge variant="info" size="sm" dot>Enterprise Verified</Badge>
           </div>
           <p className="text-sm text-slate-500 max-w-2xl">
-            Generate, verify, and export tamper-proof compliance logs, asset tokenization trails, and transaction ledgers.
+            Interactive visual charts, bar metrics, compliance gauges, and cryptographic state archives.
           </p>
         </div>
 
@@ -170,14 +189,6 @@ export default function Reports() {
           >
             <Download className="w-4 h-4 text-slate-500" />
             Export Archive
-          </button>
-
-          <button
-            onClick={() => setActiveTab('scheduled')}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-xs font-semibold shadow-2xs transition-all cursor-pointer"
-          >
-            <Clock className="w-4 h-4 text-slate-500" />
-            Schedules ({schedules.filter(s => s.active).length})
           </button>
 
           <button
@@ -201,57 +212,148 @@ export default function Reports() {
         <ReportStatsCards stats={stats} />
       )}
 
-      {/* Tabs Navigation */}
-      <div className="flex items-center justify-between border-b border-slate-200 pb-1">
-        <div className="flex gap-2">
+      {/* View Switcher Tabs */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-2">
+        <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
           <button
-            onClick={() => setActiveTab('all')}
-            className={`flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-              activeTab === 'all'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'text-slate-600 hover:bg-slate-100'
+            onClick={() => setActiveTab('analytics')}
+            className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+              activeTab === 'analytics'
+                ? 'bg-white text-blue-600 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            <FileText className="w-3.5 h-3.5" />
-            All Reports ({reports.length})
+            <BarChart3 className="w-4 h-4" />
+            Charts & Visual Analytics
           </button>
 
           <button
-            onClick={() => setActiveTab('overview')}
-            className={`flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-              activeTab === 'overview'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'text-slate-600 hover:bg-slate-100'
+            onClick={() => setActiveTab('cards')}
+            className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+              activeTab === 'cards'
+                ? 'bg-white text-blue-600 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            <BarChart3 className="w-3.5 h-3.5" />
-            Analytics & Compliance Charts
+            <LayoutGrid className="w-4 h-4" />
+            Visual Cards Grid ({reports.length})
+          </button>
+
+          <button
+            onClick={() => setActiveTab('table')}
+            className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+              activeTab === 'table'
+                ? 'bg-white text-blue-600 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <TableIcon className="w-4 h-4" />
+            Detail Table View
           </button>
 
           <button
             onClick={() => setActiveTab('scheduled')}
-            className={`flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+            className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
               activeTab === 'scheduled'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'text-slate-600 hover:bg-slate-100'
+                ? 'bg-white text-blue-600 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            <Clock className="w-3.5 h-3.5" />
-            Automated Schedules ({schedules.length})
+            <Clock className="w-4 h-4" />
+            Scheduled Jobs ({schedules.length})
           </button>
         </div>
 
         <button
           onClick={loadData}
           title="Refresh Data"
-          className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+          className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer self-end sm:self-auto"
         >
           <RefreshCw className="w-4 h-4" />
         </button>
       </div>
 
-      {/* Tab Content: All Reports View */}
-      {activeTab === 'all' && (
+      {/* Tab 1: Charts & Visual Analytics */}
+      {activeTab === 'analytics' && stats && (
+        <div className="space-y-6">
+          <ReportsOverviewCharts stats={stats} />
+
+          {/* Quick Preview of Recent Visual Cards */}
+          <div className="space-y-4 pt-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Recent Sealed Reports</h3>
+                <p className="text-xs text-slate-500">Visual cards representation with live progress metrics</p>
+              </div>
+              <button
+                onClick={() => setActiveTab('cards')}
+                className="text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline"
+              >
+                View All {reports.length} Cards &rarr;
+              </button>
+            </div>
+
+            <ReportVisualCards
+              reports={reports.slice(0, 3)}
+              onViewReport={(rep) => setSelectedReport(rep)}
+              onDownloadReport={handleDownload}
+              onDeleteReport={handleDeleteReport}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Tab 2: Visual Cards Grid with Filter Bar */}
+      {activeTab === 'cards' && (
+        <div className="space-y-5">
+          {/* Search & Category Filter Bar */}
+          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="relative flex-1 w-full sm:max-w-md">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Filter visual report cards..."
+                className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="w-full sm:w-auto px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+              >
+                <option value="All">All Categories</option>
+                <option value="Audit & Compliance">Audit & Compliance</option>
+                <option value="Digital Assets">Digital Assets</option>
+                <option value="Transactions & Gas">Transactions & Gas</option>
+                <option value="Security & Risk">Security & Risk</option>
+                <option value="System Health">System Health</option>
+              </select>
+            </div>
+          </div>
+
+          {loading ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              <CardSkeleton />
+              <CardSkeleton />
+              <CardSkeleton />
+            </div>
+          ) : (
+            <ReportVisualCards
+              reports={filteredReports}
+              onViewReport={(rep) => setSelectedReport(rep)}
+              onDownloadReport={handleDownload}
+              onDeleteReport={handleDeleteReport}
+            />
+          )}
+        </div>
+      )}
+
+      {/* Tab 3: Detailed Table */}
+      {activeTab === 'table' && (
         <div className="space-y-6">
           {loading ? (
             <div className="bg-white rounded-xl border border-slate-200 p-6">
@@ -268,14 +370,7 @@ export default function Reports() {
         </div>
       )}
 
-      {/* Tab Content: Analytics & Compliance Overview */}
-      {activeTab === 'overview' && stats && (
-        <div className="space-y-6">
-          <ReportsOverviewCharts stats={stats} />
-        </div>
-      )}
-
-      {/* Tab Content: Scheduled Reports */}
+      {/* Tab 4: Scheduled Reports */}
       {activeTab === 'scheduled' && (
         <div className="space-y-6">
           <ScheduledReportsSection
