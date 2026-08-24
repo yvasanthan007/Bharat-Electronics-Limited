@@ -2,6 +2,8 @@ import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import Dashboard from './pages/Dashboard';
+import Reports from './pages/Reports';
+import Settings from './pages/Settings';
 import Login from './pages/Login';
 import DigitalAssets from './pages/DigitalAssets';
 import Transactions from './pages/Transactions';
@@ -24,14 +26,38 @@ function App() {
       <Routes>
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<Login />} />
+
         <Route path="/bel" element={<BelLayout />}>
           <Route index element={<Dashboard />} />
+
           <Route path="digital-assets" element={<DigitalAssets />} />
           <Route path="transactions" element={<Transactions />} />
-          <Route path="*" element={<div className="flex items-center justify-center h-full text-slate-500">Coming Soon</div>} />
+
+          <Route path="reports" element={<Reports />} />
+          <Route path="settings" element={<Settings />} />
+
+          <Route
+            path="*"
+            element={
+              <div className="flex items-center justify-center h-full text-slate-500 font-medium">
+                Coming Soon
+              </div>
+            }
+          />
         </Route>
-        {/* Legacy redirect for any existing links to /dashboard */}
+
+        {/* Legacy redirects */}
         <Route path="/dashboard" element={<Navigate to="/bel" replace />} />
+        <Route path="/reports" element={<Navigate to="/bel/reports" replace />} />
+        <Route path="/settings" element={<Navigate to="/bel/settings" replace />} />
+        <Route
+          path="/dashboard/reports"
+          element={<Navigate to="/bel/reports" replace />}
+        />
+        <Route
+          path="/dashboard/settings"
+          element={<Navigate to="/bel/settings" replace />}
+        />
       </Routes>
     </BrowserRouter>
   );
