@@ -9,6 +9,8 @@ import DigitalAssets from './pages/DigitalAssets';
 import Transactions from './pages/Transactions';
 import Identities from './pages/Identities';
 import AccessControl from './pages/AccessControl';
+import SmartContracts from './pages/SmartContracts';
+import AuditTrail from './pages/AuditTrail';
 
 const BelLayout = () => (
   <div className="flex h-screen bg-slate-50 overflow-hidden">
@@ -36,6 +38,8 @@ function App() {
           <Route path="transactions" element={<Transactions />} />
           <Route path="identities" element={<Identities />} />
           <Route path="access-control" element={<AccessControl />} />
+          <Route path="smart-contracts" element={<SmartContracts />} />
+          <Route path="audit-trail" element={<AuditTrail />} />
 
           <Route path="reports" element={<Reports />} />
           <Route path="settings" element={<Settings />} />
@@ -56,6 +60,8 @@ function App() {
         <Route path="/settings" element={<Navigate to="/bel/settings" replace />} />
         <Route path="/identities" element={<Navigate to="/bel/identities" replace />} />
         <Route path="/access-control" element={<Navigate to="/bel/access-control" replace />} />
+        <Route path="/smart-contracts" element={<Navigate to="/bel/smart-contracts" replace />} />
+        <Route path="/audit-trail" element={<Navigate to="/bel/audit-trail" replace />} />
         <Route
           path="/dashboard/reports"
           element={<Navigate to="/bel/reports" replace />}
