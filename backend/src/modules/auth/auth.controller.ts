@@ -53,8 +53,8 @@ export class AuthController {
         return res.status(400).json(errorResponse('Invalid email or password'));
       }
 
-      const token = jwt.sign({ userId: user.id }, env.JWT_SECRET, { expiresIn: env.JWT_EXPIRES_IN });
-      const refreshToken = jwt.sign({ userId: user.id }, env.JWT_REFRESH_SECRET, { expiresIn: env.JWT_REFRESH_EXPIRES_IN });
+      const token = jwt.sign({ userId: user.id }, env.JWT_SECRET, { expiresIn: env.JWT_EXPIRES_IN as any });
+      const refreshToken = jwt.sign({ userId: user.id }, env.JWT_REFRESH_SECRET, { expiresIn: env.JWT_REFRESH_EXPIRES_IN as any });
 
       await prisma.refreshToken.create({
         data: {
@@ -84,9 +84,9 @@ export class AuthController {
 
       const decoded: any = jwt.verify(refreshToken, env.JWT_REFRESH_SECRET);
       
-      const newAccessToken = jwt.sign({ userId: decoded.userId }, env.JWT_SECRET, { expiresIn: env.JWT_EXPIRES_IN });
+      const newAccessToken = jwt.sign({ userId: decoded.userId }, env.JWT_SECRET, { expiresIn: env.JWT_EXPIRES_IN as any });
       
-      res.json(successResponse({ token: newAccessToken }, 'Token refreshed successfully'));
+      res.json(successResponse({ accessToken: newAccessToken }, 'Token refreshed successfully'));
     } catch (error) {
       next(error);
     }

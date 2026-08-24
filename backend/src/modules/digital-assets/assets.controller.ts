@@ -14,7 +14,7 @@ export class AssetsController {
 
   async getAssetById(req: Request, res: Response, next: NextFunction) {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const asset = await prisma.asset.findUnique({ where: { id } });
       if (!asset) return res.status(404).json(errorResponse('Asset not found'));
       res.json(successResponse(asset));

@@ -61,24 +61,41 @@ model Asset {
   price        Float
   marketCap    Float?
   change24h    Float?
-  transactions Transaction[]
   portfolioItems PortfolioItem[]
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 }
 
 model Transaction {
-  id          String   @id @default(uuid())
-  walletId    String
-  wallet      Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
-  assetId     String?
-  asset       Asset?   @relation(fields: [assetId], references: [id])
-  type        String   // BUY, SELL, TRANSFER, DEPOSIT, WITHDRAW
-  amount      Float
-  status      String   // PENDING, COMPLETED, FAILED
-  fee         Float    @default(0.0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              String   @id @default(uuid())
+  transactionHash String
+  transactionType String
+  assetSymbol     String
+  assetName       String
+  walletId        String
+  wallet          Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  network         String
+  fromAddress     String
+  toAddress       String
+  amount          Float
+  usdValue        Float
+  transactionFee  Float
+  gasUsed         Float?
+  gasPrice        Float?
+  status          String
+  confirmations   Int      @default(0)
+  blockNumber     Int?
+  timestamp       DateTime
+  memo            String?
+  createdBy       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([transactionHash])
+  @@index([walletId])
+  @@index([status])
+  @@index([timestamp])
+  @@index([network])
 }
 
 model Portfolio {

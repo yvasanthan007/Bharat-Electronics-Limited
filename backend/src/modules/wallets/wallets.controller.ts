@@ -13,7 +13,7 @@ export class WalletsController {
 
   async getWalletById(req: Request, res: Response, next: NextFunction) {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const wallet = await prisma.wallet.findUnique({ where: { id }, include: { transactions: { take: 10, orderBy: { createdAt: 'desc' } } } });
       if (!wallet) return res.status(404).json(errorResponse('Wallet not found'));
       res.json(successResponse(wallet));

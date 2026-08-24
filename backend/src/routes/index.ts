@@ -4,7 +4,7 @@ import authRoutes from '../modules/auth/auth.routes';
 import usersRoutes from '../modules/users/users.routes';
 import dashboardRoutes from '../modules/dashboard/dashboard.routes';
 import assetsRoutes from '../modules/digital-assets/assets.routes';
-import transactionsRoutes from '../modules/transactions/transactions.routes';
+import transactionsRoutes from './transaction.routes';
 import analyticsRoutes from '../modules/analytics/analytics.routes';
 import walletsRoutes from '../modules/wallets/wallets.routes';
 import notificationsRoutes from '../modules/notifications/notifications.routes';

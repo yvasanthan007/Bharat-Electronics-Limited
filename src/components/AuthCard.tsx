@@ -10,20 +10,58 @@ const AuthCard = () => {
   const [isWalletLoading, setIsWalletLoading] = useState(false);
   const navigate = useNavigate();
 
-  const handleLogin = (e: FormEvent) => {
+  const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
 
-    // Mock authentication
-    setTimeout(() => {
-      setIsLoading(false);
-      if (employeeId === 'BEL001' && password === 'bel123') {
+    try {
+      const response = await fetch('http://localhost:4000/api/v1/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: employeeId, password }),
+      });
+      const data = await response.json();
+
+      if (data.success && data.data?.token) {
+        localStorage.setItem('accessToken', data.data.token);
+        localStorage.setItem('refreshToken', data.data.refreshToken);
+
+        // Fetch profile
+        const profileRes = await fetch('http://localhost:4000/api/v1/users/me', {
+          headers: {
+            'Authorization': `Bearer ${data.data.token}`
+          }
+        });
+        const profileData = await profileRes.json();
+        
+        if (profileData.success) {
+          localStorage.setItem('user', JSON.stringify(profileData.data));
+        }
+
+        setIsLoading(false);
         navigate('/bel');
       } else {
-        setError('Invalid Employee ID or password');
+        setIsLoading(false);
+        setError(data.message || 'Invalid email or password');
       }
-    }, 800);
+    } catch (err) {
+      // Fallback to mock credentials if backend is down
+      setTimeout(() => {
+        setIsLoading(false);
+        if (employeeId === 'BEL001' && password === 'bel123') {
+          localStorage.setItem('user', JSON.stringify({
+            firstName: 'Rahul',
+            lastName: 'Verma',
+            email: 'rahul@bel.com',
+            role: { name: 'ADMIN' }
+          }));
+          navigate('/bel');
+        } else {
+          setError('Connection error or invalid credentials');
+        }
+      }, 500);
+    }
   };
 
   const handleWalletConnect = () => {

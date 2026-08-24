@@ -1,5 +1,6 @@
+import { describe, it, expect } from 'vitest';
 import request from 'supertest';
-import app from '../../app';
+import app from '../app';
 
 describe('Auth Endpoints', () => {
   it('POST /api/v1/auth/login with bad credentials → 400', async () => {

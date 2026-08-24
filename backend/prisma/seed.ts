@@ -1,7 +1,17 @@
 import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { Pool } from 'pg';
 import bcrypt from 'bcrypt';
+import crypto from 'crypto';
+import dotenv from 'dotenv';
+dotenv.config();
 
-const prisma = new PrismaClient();
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
+
+const adapter = new PrismaPg(pool);
+const prisma = new PrismaClient({ adapter });
 
 async function main() {
   console.log('🌱 Seeding database...');
@@ -38,6 +48,20 @@ async function main() {
       passwordHash: adminHash,
       firstName: 'Admin',
       lastName: 'User',
+      roleId: adminRole.id,
+    },
+  });
+
+  // BEL001 employee user
+  const mockEmployeeHash = await bcrypt.hash('bel123', 10);
+  const employeeUser = await prisma.user.upsert({
+    where: { email: 'BEL001' },
+    update: { passwordHash: mockEmployeeHash },
+    create: {
+      email: 'BEL001',
+      passwordHash: mockEmployeeHash,
+      firstName: 'Rahul',
+      lastName: 'Verma',
       roleId: adminRole.id,
     },
   });
@@ -106,17 +130,31 @@ async function main() {
   }
 
   // Transactions
-  const txTypes = ['BUY', 'SELL', 'DEPOSIT', 'WITHDRAW'];
-  const txStatuses = ['COMPLETED', 'PENDING', 'FAILED'];
+  const txTypes = ['Send', 'Receive', 'Swap', 'Stake', 'Unstake', 'Bridge', 'Mint', 'Burn', 'Deposit', 'Withdraw'];
+  const txStatuses = ['Pending', 'Processing', 'Confirmed', 'Failed', 'Cancelled'];
+  const networks = ['Ethereum', 'Solana', 'Polygon', 'Arbitrum', 'Binance Smart Chain'];
   for (let i = 0; i < 15; i++) {
+    const asset = assets[i % assets.length];
     await prisma.transaction.create({
       data: {
         walletId: wallet.id,
-        assetId: assets[i % assets.length].id,
-        type: txTypes[i % txTypes.length],
+        transactionHash: '0x' + crypto.randomBytes(32).toString('hex'),
+        transactionType: txTypes[i % txTypes.length],
+        assetSymbol: asset.symbol,
+        assetName: asset.name,
+        network: networks[i % networks.length],
+        fromAddress: '0x' + crypto.randomBytes(20).toString('hex'),
+        toAddress: '0x' + crypto.randomBytes(20).toString('hex'),
         amount: parseFloat((Math.random() * 5000).toFixed(2)),
-        status: i < 12 ? 'COMPLETED' : txStatuses[i % txStatuses.length],
-        fee: parseFloat((Math.random() * 10).toFixed(2)),
+        usdValue: parseFloat((Math.random() * 10000).toFixed(2)),
+        transactionFee: parseFloat((Math.random() * 10).toFixed(2)),
+        gasUsed: Math.floor(Math.random() * 100000),
+        gasPrice: Math.floor(Math.random() * 50),
+        status: i < 12 ? 'Confirmed' : txStatuses[i % txStatuses.length],
+        confirmations: i < 12 ? 12 + Math.floor(Math.random() * 100) : 0,
+        blockNumber: 15300000 + i,
+        timestamp: new Date(Date.now() - Math.floor(Math.random() * 10000000000)),
+        memo: `Test transaction ${i}`,
       },
     });
   }
