@@ -10,8 +10,8 @@ import DigitalAssets from './pages/DigitalAssets';
 import Transactions from './pages/Transactions';
 import Identities from './pages/Identities';
 import AccessControl from './pages/AccessControl';
-import AuditTrail from './pages/AuditTrail';
 import SmartContracts from './pages/SmartContracts';
+import AuditTrail from './pages/AuditTrail';
 
 const BelLayout = () => (
   <div className="flex h-screen bg-slate-50 overflow-hidden">
@@ -32,7 +32,7 @@ function App() {
     <BrowserRouter>
       <Routes>
         {/* Entry / Login */}
-        <Route path="/" element={<Navigate to="/bel" replace />} />
+        <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<Login />} />
 
         {/* Main BEL Application under /bel */}
@@ -57,20 +57,18 @@ function App() {
           />
         </Route>
 
-        {/* Top-Level Direct Route Wrappers */}
-        <Route element={<BelLayout />}>
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/digital-assets" element={<DigitalAssets />} />
-          <Route path="/transactions" element={<Transactions />} />
-          <Route path="/identities" element={<Identities />} />
-          <Route path="/access-control" element={<AccessControl />} />
-          <Route path="/reports" element={<Reports />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="/audit-trail" element={<AuditTrail />} />
-          <Route path="/smart-contracts" element={<SmartContracts />} />
-          <Route path="/dashboard/reports" element={<Reports />} />
-          <Route path="/dashboard/settings" element={<Settings />} />
-        </Route>
+        {/* Direct Route Wrappers & Redirects */}
+        <Route path="/dashboard" element={<Navigate to="/bel/dashboard" replace />} />
+        <Route path="/digital-assets" element={<Navigate to="/bel/digital-assets" replace />} />
+        <Route path="/transactions" element={<Navigate to="/bel/transactions" replace />} />
+        <Route path="/identities" element={<Navigate to="/bel/identities" replace />} />
+        <Route path="/access-control" element={<Navigate to="/bel/access-control" replace />} />
+        <Route path="/reports" element={<Navigate to="/bel/reports" replace />} />
+        <Route path="/settings" element={<Navigate to="/bel/settings" replace />} />
+        <Route path="/audit-trail" element={<Navigate to="/bel/audit-trail" replace />} />
+        <Route path="/smart-contracts" element={<Navigate to="/bel/smart-contracts" replace />} />
+        <Route path="/dashboard/reports" element={<Navigate to="/bel/reports" replace />} />
+        <Route path="/dashboard/settings" element={<Navigate to="/bel/settings" replace />} />
 
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/bel" replace />} />
