@@ -1,68 +1,85 @@
-import { useState } from 'react';
-import { Download, Filter, Search, Radio } from 'lucide-react';
-import AuditStats from '../components/AuditStats';
-import EventOverview from '../components/EventOverview';
-import EventCategories from '../components/EventCategories';
-import RecentActivity from '../components/RecentActivity';
-import AuditEventTable from '../components/AuditEventTable';
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import Sidebar from './components/Sidebar';
+import Header from './components/Header';
 
-export default function AuditTrail() {
-  const [liveMonitor, setLiveMonitor] = useState(false);
+import Dashboard from './pages/Dashboard';
+import Reports from './pages/Reports';
+import Settings from './pages/Settings';
+import Login from './pages/Login';
+import DigitalAssets from './pages/DigitalAssets';
+import Transactions from './pages/Transactions';
+import Identities from './pages/Identities';
+import AccessControl from './pages/AccessControl';
+import SmartContracts from './pages/SmartContracts';
+import AuditTrail from './pages/AuditTrail';
 
-  return (
-    <div className="max-w-[1400px] mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight mb-1">Audit Trail</h1>
-          <p className="text-sm text-slate-500">Track, monitor and verify all platform activities and events</p>
-        </div>
+const BelLayout = () => (
+  <div className="flex h-screen bg-slate-50 overflow-hidden">
+    <Sidebar />
 
-        <div className="flex items-center gap-2 flex-wrap">
-          <button className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
-            <Download className="w-4 h-4" />
-            Export Logs
-          </button>
-          <button className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
-            <Filter className="w-4 h-4" />
-            Filter
-          </button>
-          <button className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
-            <Search className="w-4 h-4" />
-            Advanced Search
-          </button>
-          <button
-            onClick={() => setLiveMonitor(!liveMonitor)}
-            className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors border ${
-              liveMonitor
-                ? 'bg-red-50 text-red-700 border-red-200'
-                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-            }`}
-          >
-            <Radio className={`w-4 h-4 ${liveMonitor ? 'animate-pulse' : ''}`} />
-            {liveMonitor ? 'Live' : 'Live Monitor'}
-          </button>
-        </div>
-      </div>
+    <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <Header />
 
-      {/* KPI Cards */}
-      <AuditStats />
-
-      {/* Analytics Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          <EventOverview />
-        </div>
-        <EventCategories />
-      </div>
-
-      {/* Table + Recent Activity */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <div className="xl:col-span-2">
-          <AuditEventTable />
-        </div>
-        <RecentActivity />
-      </div>
+      <main className="flex-1 overflow-y-auto p-6">
+        <Outlet />
+      </main>
     </div>
+  </div>
+);
+
+function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+
+        <Route path="/" element={<Navigate to="/login" replace />} />
+
+        <Route path="/login" element={<Login />} />
+
+        <Route path="/bel" element={<BelLayout />}>
+          <Route index element={<Dashboard />} />
+
+          <Route path="digital-assets" element={<DigitalAssets />} />
+          <Route path="transactions" element={<Transactions />} />
+          <Route path="identities" element={<Identities />} />
+          <Route path="access-control" element={<AccessControl />} />
+          <Route path="smart-contracts" element={<SmartContracts />} />
+          <Route path="audit-trail" element={<AuditTrail />} />
+          <Route path="reports" element={<Reports />} />
+          <Route path="settings" element={<Settings />} />
+
+          <Route
+            path="*"
+            element={
+              <div className="flex items-center justify-center h-full text-slate-500 font-medium">
+                Coming Soon
+              </div>
+            }
+          />
+        </Route>
+
+        {/* Legacy redirects */}
+        <Route path="/dashboard" element={<Navigate to="/bel" replace />} />
+        <Route path="/reports" element={<Navigate to="/bel/reports" replace />} />
+        <Route path="/settings" element={<Navigate to="/bel/settings" replace />} />
+        <Route path="/identities" element={<Navigate to="/bel/identities" replace />} />
+        <Route path="/access-control" element={<Navigate to="/bel/access-control" replace />} />
+        <Route path="/smart-contracts" element={<Navigate to="/bel/smart-contracts" replace />} />
+        <Route path="/audit-trail" element={<Navigate to="/bel/audit-trail" replace />} />
+
+        <Route
+          path="/dashboard/reports"
+          element={<Navigate to="/bel/reports" replace />}
+        />
+
+        <Route
+          path="/dashboard/settings"
+          element={<Navigate to="/bel/settings" replace />}
+        />
+
+      </Routes>
+    </BrowserRouter>
   );
 }
+
+export default App;
