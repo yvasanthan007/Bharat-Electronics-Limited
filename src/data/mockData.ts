@@ -177,3 +177,53 @@ export const mockIdentities: Identity[] = [
     lastActive: 'Never',
   },
 ];
+
+export interface Role {
+  id: string;
+  name: string;
+  usersCount: number;
+  permissionsCount: number;
+  status: 'Active' | 'Inactive';
+  description: string;
+}
+
+export const mockRoles: Role[] = [
+  { id: '1', name: 'Administrator', usersCount: 150, permissionsCount: 128, status: 'Active', description: 'Full system access' },
+  { id: '2', name: 'Manager', usersCount: 224, permissionsCount: 85, status: 'Active', description: 'Manage teams and resources' },
+  { id: '3', name: 'Engineer', usersCount: 499, permissionsCount: 42, status: 'Active', description: 'Access to development resources' },
+  { id: '4', name: 'Auditor', usersCount: 187, permissionsCount: 28, status: 'Active', description: 'Read-only audit access' },
+  { id: '5', name: 'User', usersCount: 188, permissionsCount: 16, status: 'Active', description: 'Basic platform access' },
+];
+
+export const mockPermissions = [
+  'Manage Identities',
+  'Assign Roles',
+  'Manage Assets (NFTs)',
+  'Smart Contracts',
+  'View Audit Trail',
+  'System Settings',
+  'Export Reports'
+];
+
+export const mockPermissionMatrix: Record<string, boolean[]> = {
+  'Administrator': [true, true, true, true, true, true, true],
+  'Manager': [true, true, true, false, true, false, true],
+  'Engineer': [false, false, true, true, true, false, false],
+  'Auditor': [false, false, false, false, true, false, true],
+  'User': [false, false, false, false, false, false, false],
+};
+
+export interface AccessRequest {
+  id: string;
+  user: string;
+  requestedAccess: string;
+  resource: string;
+  requestedOn: string;
+  status: 'Approved' | 'Pending' | 'Rejected';
+}
+
+export const mockAccessRequests: AccessRequest[] = [
+  { id: '1', user: 'Neha Gupta', requestedAccess: 'Access to Digital Assets', resource: 'NFT Management', requestedOn: '2026-08-24 10:15 AM', status: 'Approved' },
+  { id: '2', user: 'Amit Kumar', requestedAccess: 'Access to Smart Contracts', resource: 'Contract Deployment', requestedOn: '2026-08-24 11:30 AM', status: 'Pending' },
+  { id: '3', user: 'Priya Singh', requestedAccess: 'View Audit Logs', resource: 'Audit Trail', requestedOn: '2026-08-23 04:45 PM', status: 'Rejected' },
+];
