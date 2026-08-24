@@ -10,33 +10,310 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AboutRouteImport } from './routes/about'
+import { Route as HowItWorksRouteImport } from './routes/how-it-works'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as PlatformRouteImport } from './routes/platform'
+import { Route as SecurityRouteImport } from './routes/security'
+import { Route as AppIndexRouteImport } from './routes/app/index'
+import { Route as AppAccessRouteImport } from './routes/app/access'
+import { Route as AppActivityRouteImport } from './routes/app/activity'
+import { Route as AppAnalyticsRouteImport } from './routes/app/analytics'
+import { Route as AppApprovalsRouteImport } from './routes/app/approvals'
+import { Route as AppAssetsRouteImport } from './routes/app/assets'
+import { Route as AppAuditRouteImport } from './routes/app/audit'
+import { Route as AppHistoryRouteImport } from './routes/app/history'
+import { Route as AppIdentityRouteImport } from './routes/app/identity'
+import { Route as AppMonitoringRouteImport } from './routes/app/monitoring'
+import { Route as AppNotificationsRouteImport } from './routes/app/notifications'
+import { Route as AppPoliciesRouteImport } from './routes/app/policies'
+import { Route as AppRequestRouteImport } from './routes/app/request'
+import { Route as AppRolesRouteImport } from './routes/app/roles'
+import { Route as AppSettingsRouteImport } from './routes/app/settings'
+import { Route as AppUsersRouteImport } from './routes/app/users'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AboutRoute = AboutRouteImport.update({
+  id: '/about',
+  path: '/about',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HowItWorksRoute = HowItWorksRouteImport.update({
+  id: '/how-it-works',
+  path: '/how-it-works',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PlatformRoute = PlatformRouteImport.update({
+  id: '/platform',
+  path: '/platform',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SecurityRoute = SecurityRouteImport.update({
+  id: '/security',
+  path: '/security',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppIndexRoute = AppIndexRouteImport.update({
+  id: '/app/',
+  path: '/app/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppAccessRoute = AppAccessRouteImport.update({
+  id: '/app/access',
+  path: '/app/access',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppActivityRoute = AppActivityRouteImport.update({
+  id: '/app/activity',
+  path: '/app/activity',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppAnalyticsRoute = AppAnalyticsRouteImport.update({
+  id: '/app/analytics',
+  path: '/app/analytics',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppApprovalsRoute = AppApprovalsRouteImport.update({
+  id: '/app/approvals',
+  path: '/app/approvals',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppAssetsRoute = AppAssetsRouteImport.update({
+  id: '/app/assets',
+  path: '/app/assets',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppAuditRoute = AppAuditRouteImport.update({
+  id: '/app/audit',
+  path: '/app/audit',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppHistoryRoute = AppHistoryRouteImport.update({
+  id: '/app/history',
+  path: '/app/history',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppIdentityRoute = AppIdentityRouteImport.update({
+  id: '/app/identity',
+  path: '/app/identity',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppMonitoringRoute = AppMonitoringRouteImport.update({
+  id: '/app/monitoring',
+  path: '/app/monitoring',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppNotificationsRoute = AppNotificationsRouteImport.update({
+  id: '/app/notifications',
+  path: '/app/notifications',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppPoliciesRoute = AppPoliciesRouteImport.update({
+  id: '/app/policies',
+  path: '/app/policies',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppRequestRoute = AppRequestRouteImport.update({
+  id: '/app/request',
+  path: '/app/request',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppRolesRoute = AppRolesRouteImport.update({
+  id: '/app/roles',
+  path: '/app/roles',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppSettingsRoute = AppSettingsRouteImport.update({
+  id: '/app/settings',
+  path: '/app/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppUsersRoute = AppUsersRouteImport.update({
+  id: '/app/users',
+  path: '/app/users',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
+  '/how-it-works': typeof HowItWorksRoute
+  '/login': typeof LoginRoute
+  '/platform': typeof PlatformRoute
+  '/security': typeof SecurityRoute
+  '/app/access': typeof AppAccessRoute
+  '/app/activity': typeof AppActivityRoute
+  '/app/analytics': typeof AppAnalyticsRoute
+  '/app/approvals': typeof AppApprovalsRoute
+  '/app/assets': typeof AppAssetsRoute
+  '/app/audit': typeof AppAuditRoute
+  '/app/history': typeof AppHistoryRoute
+  '/app/identity': typeof AppIdentityRoute
+  '/app/monitoring': typeof AppMonitoringRoute
+  '/app/notifications': typeof AppNotificationsRoute
+  '/app/policies': typeof AppPoliciesRoute
+  '/app/request': typeof AppRequestRoute
+  '/app/roles': typeof AppRolesRoute
+  '/app/settings': typeof AppSettingsRoute
+  '/app/users': typeof AppUsersRoute
+  '/app/': typeof AppIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
+  '/how-it-works': typeof HowItWorksRoute
+  '/login': typeof LoginRoute
+  '/platform': typeof PlatformRoute
+  '/security': typeof SecurityRoute
+  '/app/access': typeof AppAccessRoute
+  '/app/activity': typeof AppActivityRoute
+  '/app/analytics': typeof AppAnalyticsRoute
+  '/app/approvals': typeof AppApprovalsRoute
+  '/app/assets': typeof AppAssetsRoute
+  '/app/audit': typeof AppAuditRoute
+  '/app/history': typeof AppHistoryRoute
+  '/app/identity': typeof AppIdentityRoute
+  '/app/monitoring': typeof AppMonitoringRoute
+  '/app/notifications': typeof AppNotificationsRoute
+  '/app/policies': typeof AppPoliciesRoute
+  '/app/request': typeof AppRequestRoute
+  '/app/roles': typeof AppRolesRoute
+  '/app/settings': typeof AppSettingsRoute
+  '/app/users': typeof AppUsersRoute
+  '/app': typeof AppIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
+  '/how-it-works': typeof HowItWorksRoute
+  '/login': typeof LoginRoute
+  '/platform': typeof PlatformRoute
+  '/security': typeof SecurityRoute
+  '/app/access': typeof AppAccessRoute
+  '/app/activity': typeof AppActivityRoute
+  '/app/analytics': typeof AppAnalyticsRoute
+  '/app/approvals': typeof AppApprovalsRoute
+  '/app/assets': typeof AppAssetsRoute
+  '/app/audit': typeof AppAuditRoute
+  '/app/history': typeof AppHistoryRoute
+  '/app/identity': typeof AppIdentityRoute
+  '/app/monitoring': typeof AppMonitoringRoute
+  '/app/notifications': typeof AppNotificationsRoute
+  '/app/policies': typeof AppPoliciesRoute
+  '/app/request': typeof AppRequestRoute
+  '/app/roles': typeof AppRolesRoute
+  '/app/settings': typeof AppSettingsRoute
+  '/app/users': typeof AppUsersRoute
+  '/app/': typeof AppIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/about'
+    | '/how-it-works'
+    | '/login'
+    | '/platform'
+    | '/security'
+    | '/app/access'
+    | '/app/activity'
+    | '/app/analytics'
+    | '/app/approvals'
+    | '/app/assets'
+    | '/app/audit'
+    | '/app/history'
+    | '/app/identity'
+    | '/app/monitoring'
+    | '/app/notifications'
+    | '/app/policies'
+    | '/app/request'
+    | '/app/roles'
+    | '/app/settings'
+    | '/app/users'
+    | '/app/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/about'
+    | '/how-it-works'
+    | '/login'
+    | '/platform'
+    | '/security'
+    | '/app/access'
+    | '/app/activity'
+    | '/app/analytics'
+    | '/app/approvals'
+    | '/app/assets'
+    | '/app/audit'
+    | '/app/history'
+    | '/app/identity'
+    | '/app/monitoring'
+    | '/app/notifications'
+    | '/app/policies'
+    | '/app/request'
+    | '/app/roles'
+    | '/app/settings'
+    | '/app/users'
+    | '/app'
+  id:
+    | '__root__'
+    | '/'
+    | '/about'
+    | '/how-it-works'
+    | '/login'
+    | '/platform'
+    | '/security'
+    | '/app/access'
+    | '/app/activity'
+    | '/app/analytics'
+    | '/app/approvals'
+    | '/app/assets'
+    | '/app/audit'
+    | '/app/history'
+    | '/app/identity'
+    | '/app/monitoring'
+    | '/app/notifications'
+    | '/app/policies'
+    | '/app/request'
+    | '/app/roles'
+    | '/app/settings'
+    | '/app/users'
+    | '/app/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AboutRoute: typeof AboutRoute
+  HowItWorksRoute: typeof HowItWorksRoute
+  LoginRoute: typeof LoginRoute
+  PlatformRoute: typeof PlatformRoute
+  SecurityRoute: typeof SecurityRoute
+  AppAccessRoute: typeof AppAccessRoute
+  AppActivityRoute: typeof AppActivityRoute
+  AppAnalyticsRoute: typeof AppAnalyticsRoute
+  AppApprovalsRoute: typeof AppApprovalsRoute
+  AppAssetsRoute: typeof AppAssetsRoute
+  AppAuditRoute: typeof AppAuditRoute
+  AppHistoryRoute: typeof AppHistoryRoute
+  AppIdentityRoute: typeof AppIdentityRoute
+  AppMonitoringRoute: typeof AppMonitoringRoute
+  AppNotificationsRoute: typeof AppNotificationsRoute
+  AppPoliciesRoute: typeof AppPoliciesRoute
+  AppRequestRoute: typeof AppRequestRoute
+  AppRolesRoute: typeof AppRolesRoute
+  AppSettingsRoute: typeof AppSettingsRoute
+  AppUsersRoute: typeof AppUsersRoute
+  AppIndexRoute: typeof AppIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +325,179 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/about': {
+      id: '/about'
+      path: '/about'
+      fullPath: '/about'
+      preLoaderRoute: typeof AboutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/how-it-works': {
+      id: '/how-it-works'
+      path: '/how-it-works'
+      fullPath: '/how-it-works'
+      preLoaderRoute: typeof HowItWorksRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/platform': {
+      id: '/platform'
+      path: '/platform'
+      fullPath: '/platform'
+      preLoaderRoute: typeof PlatformRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/security': {
+      id: '/security'
+      path: '/security'
+      fullPath: '/security'
+      preLoaderRoute: typeof SecurityRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/app/': {
+      id: '/app/'
+      path: '/app'
+      fullPath: '/app/'
+      preLoaderRoute: typeof AppIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/app/access': {
+      id: '/app/access'
+      path: '/app/access'
+      fullPath: '/app/access'
+      preLoaderRoute: typeof AppAccessRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/app/activity': {
+      id: '/app/activity'
+      path: '/app/activity'
+      fullPath: '/app/activity'
+      preLoaderRoute: typeof AppActivityRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/app/analytics': {
+      id: '/app/analytics'
+      path: '/app/analytics'
+      fullPath: '/app/analytics'
+      preLoaderRoute: typeof AppAnalyticsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/app/approvals': {
+      id: '/app/approvals'
+      path: '/app/approvals'
+      fullPath: '/app/approvals'
+      preLoaderRoute: typeof AppApprovalsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/app/assets': {
+      id: '/app/assets'
+      path: '/app/assets'
+      fullPath: '/app/assets'
+      preLoaderRoute: typeof AppAssetsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/app/audit': {
+      id: '/app/audit'
+      path: '/app/audit'
+      fullPath: '/app/audit'
+      preLoaderRoute: typeof AppAuditRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/app/history': {
+      id: '/app/history'
+      path: '/app/history'
+      fullPath: '/app/history'
+      preLoaderRoute: typeof AppHistoryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/app/identity': {
+      id: '/app/identity'
+      path: '/app/identity'
+      fullPath: '/app/identity'
+      preLoaderRoute: typeof AppIdentityRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/app/monitoring': {
+      id: '/app/monitoring'
+      path: '/app/monitoring'
+      fullPath: '/app/monitoring'
+      preLoaderRoute: typeof AppMonitoringRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/app/notifications': {
+      id: '/app/notifications'
+      path: '/app/notifications'
+      fullPath: '/app/notifications'
+      preLoaderRoute: typeof AppNotificationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/app/policies': {
+      id: '/app/policies'
+      path: '/app/policies'
+      fullPath: '/app/policies'
+      preLoaderRoute: typeof AppPoliciesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/app/request': {
+      id: '/app/request'
+      path: '/app/request'
+      fullPath: '/app/request'
+      preLoaderRoute: typeof AppRequestRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/app/roles': {
+      id: '/app/roles'
+      path: '/app/roles'
+      fullPath: '/app/roles'
+      preLoaderRoute: typeof AppRolesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/app/settings': {
+      id: '/app/settings'
+      path: '/app/settings'
+      fullPath: '/app/settings'
+      preLoaderRoute: typeof AppSettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/app/users': {
+      id: '/app/users'
+      path: '/app/users'
+      fullPath: '/app/users'
+      preLoaderRoute: typeof AppUsersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AboutRoute: AboutRoute,
+  HowItWorksRoute: HowItWorksRoute,
+  LoginRoute: LoginRoute,
+  PlatformRoute: PlatformRoute,
+  SecurityRoute: SecurityRoute,
+  AppAccessRoute: AppAccessRoute,
+  AppActivityRoute: AppActivityRoute,
+  AppAnalyticsRoute: AppAnalyticsRoute,
+  AppApprovalsRoute: AppApprovalsRoute,
+  AppAssetsRoute: AppAssetsRoute,
+  AppAuditRoute: AppAuditRoute,
+  AppHistoryRoute: AppHistoryRoute,
+  AppIdentityRoute: AppIdentityRoute,
+  AppMonitoringRoute: AppMonitoringRoute,
+  AppNotificationsRoute: AppNotificationsRoute,
+  AppPoliciesRoute: AppPoliciesRoute,
+  AppRequestRoute: AppRequestRoute,
+  AppRolesRoute: AppRolesRoute,
+  AppSettingsRoute: AppSettingsRoute,
+  AppUsersRoute: AppUsersRoute,
+  AppIndexRoute: AppIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

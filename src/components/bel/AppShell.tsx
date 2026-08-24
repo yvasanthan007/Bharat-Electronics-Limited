@@ -123,7 +123,10 @@ export function AppShell({ children }: { children: ReactNode }) {
       </div>
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 pb-4">
         {items.map((item) => {
-          const active = item.to === "/app" ? pathname === "/app" : pathname.startsWith(item.to);
+          const active =
+            item.to === "/app"
+              ? pathname === "/app" || pathname === "/app/"
+              : pathname.startsWith(item.to);
           return (
             <NavLink
               key={item.to}
