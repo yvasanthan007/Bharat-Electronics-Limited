@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
+
 import Dashboard from './pages/Dashboard';
 import Reports from './pages/Reports';
 import Settings from './pages/Settings';
@@ -9,12 +10,16 @@ import DigitalAssets from './pages/DigitalAssets';
 import Transactions from './pages/Transactions';
 import Identities from './pages/Identities';
 import AccessControl from './pages/AccessControl';
+import AuditTrail from './pages/AuditTrail';
+import SmartContracts from './pages/SmartContracts';
 
 const BelLayout = () => (
   <div className="flex h-screen bg-slate-50 overflow-hidden">
     <Sidebar />
+
     <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
       <Header />
+
       <main className="flex-1 overflow-y-auto p-6">
         <Outlet />
       </main>
@@ -26,7 +31,9 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
+
         <Route path="/" element={<Navigate to="/login" replace />} />
+
         <Route path="/login" element={<Login />} />
 
         <Route path="/bel" element={<BelLayout />}>
@@ -34,8 +41,12 @@ function App() {
 
           <Route path="digital-assets" element={<DigitalAssets />} />
           <Route path="transactions" element={<Transactions />} />
+
           <Route path="identities" element={<Identities />} />
           <Route path="access-control" element={<AccessControl />} />
+
+          <Route path="audit-trail" element={<AuditTrail />} />
+          <Route path="smart-contracts" element={<SmartContracts />} />
 
           <Route path="reports" element={<Reports />} />
           <Route path="settings" element={<Settings />} />
@@ -56,14 +67,17 @@ function App() {
         <Route path="/settings" element={<Navigate to="/bel/settings" replace />} />
         <Route path="/identities" element={<Navigate to="/bel/identities" replace />} />
         <Route path="/access-control" element={<Navigate to="/bel/access-control" replace />} />
+
         <Route
           path="/dashboard/reports"
           element={<Navigate to="/bel/reports" replace />}
         />
+
         <Route
           path="/dashboard/settings"
           element={<Navigate to="/bel/settings" replace />}
         />
+
       </Routes>
     </BrowserRouter>
   );
