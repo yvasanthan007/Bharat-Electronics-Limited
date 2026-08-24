@@ -3,9 +3,13 @@ import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 
 import Dashboard from './pages/Dashboard';
+import Reports from './pages/Reports';
+import Settings from './pages/Settings';
 import Login from './pages/Login';
 import DigitalAssets from './pages/DigitalAssets';
 import Transactions from './pages/Transactions';
+import Identities from './pages/Identities';
+import AccessControl from './pages/AccessControl';
 import AuditTrail from './pages/AuditTrail';
 import SmartContracts from './pages/SmartContracts';
 
@@ -38,22 +42,40 @@ function App() {
           <Route path="digital-assets" element={<DigitalAssets />} />
           <Route path="transactions" element={<Transactions />} />
 
+          <Route path="identities" element={<Identities />} />
+          <Route path="access-control" element={<AccessControl />} />
+
           <Route path="audit-trail" element={<AuditTrail />} />
           <Route path="smart-contracts" element={<SmartContracts />} />
+
+          <Route path="reports" element={<Reports />} />
+          <Route path="settings" element={<Settings />} />
 
           <Route
             path="*"
             element={
-              <div className="flex items-center justify-center h-full text-slate-500">
+              <div className="flex items-center justify-center h-full text-slate-500 font-medium">
                 Coming Soon
               </div>
             }
           />
         </Route>
 
+        {/* Legacy redirects */}
+        <Route path="/dashboard" element={<Navigate to="/bel" replace />} />
+        <Route path="/reports" element={<Navigate to="/bel/reports" replace />} />
+        <Route path="/settings" element={<Navigate to="/bel/settings" replace />} />
+        <Route path="/identities" element={<Navigate to="/bel/identities" replace />} />
+        <Route path="/access-control" element={<Navigate to="/bel/access-control" replace />} />
+
         <Route
-          path="/dashboard"
-          element={<Navigate to="/bel" replace />}
+          path="/dashboard/reports"
+          element={<Navigate to="/bel/reports" replace />}
+        />
+
+        <Route
+          path="/dashboard/settings"
+          element={<Navigate to="/bel/settings" replace />}
         />
 
       </Routes>
