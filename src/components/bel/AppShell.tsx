@@ -22,6 +22,13 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+const NavLink = Link as unknown as React.ComponentType<{
+  to: string;
+  className?: string;
+  onClick?: () => void;
+  children?: ReactNode;
+}>;
 import { actions, getUser, ROLE_LABEL, useBel, type Role } from "@/lib/bel-store";
 import { BelLogo, Pill } from "./primitives";
 
@@ -118,7 +125,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         {items.map((item) => {
           const active = item.to === "/app" ? pathname === "/app" : pathname.startsWith(item.to);
           return (
-            <Link
+            <NavLink
               key={item.to}
               to={item.to}
               onClick={() => setOpen(false)}
@@ -136,7 +143,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   {unread}
                 </span>
               ) : null}
-            </Link>
+            </NavLink>
           );
         })}
       </nav>

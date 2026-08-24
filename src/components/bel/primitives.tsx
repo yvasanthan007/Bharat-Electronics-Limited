@@ -93,7 +93,7 @@ export function AccessBadge({ status }: { status: AccessStatus }) {
   return (
     <Pill tone={tone}>
       <Dot tone={tone} />
-      {status[0].toUpperCase() + status.slice(1)}
+      {status.charAt(0).toUpperCase() + status.slice(1)}
     </Pill>
   );
 }
