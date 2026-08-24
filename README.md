@@ -1,13 +1,32 @@
-# Bharat-Electronics-Limited
-BEL — Digital Trust &amp; Secure Access Platform
-BEL stands for:
+# React + TypeScript + Vite
 
-🏢 Bharat Electronics Limited
+This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
 
-It is a Government of India enterprise under the Ministry of Defence, focused on defence electronics and related technologies.
+Currently, two official plugins are available:
 
-For our SIH prototype, we can present the application in a BEL organizational context:
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
 
-BEL — Digital Trust & Secure Access Platform
+## React Compiler
 
-This will represent how BEL could manage digital identities, role-based access, digital assets, and tamper-resistant audit records.
+The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+
+## Expanding the Oxlint configuration
+
+If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+
+```json
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["react", "typescript", "oxc"],
+  "options": {
+    "typeAware": true
+  },
+  "rules": {
+    "react/rules-of-hooks": "error",
+    "react/only-export-components": ["warn", { "allowConstantExport": true }]
+  }
+}
+```
+
+See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
