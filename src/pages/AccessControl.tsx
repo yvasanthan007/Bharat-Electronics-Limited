@@ -6,8 +6,11 @@ import PermissionMatrix from '../components/PermissionMatrix';
 import AccessRequests from '../components/AccessRequests';
 import AccessModals from '../components/AccessModals';
 import FullMatrixModal from '../components/FullMatrixModal';
+import { mockRoles, mockPermissionMatrix, type Role } from '../data/mockData';
 
 export default function AccessControl() {
+  // Primary Dynamic Roles & Matrix State
+  const [roles, setRoles] = useState<Role[]>(mockRoles);
   const [createRoleOpen, setCreateRoleOpen] = useState(false);
   const [assignAccessOpen, setAssignAccessOpen] = useState(false);
   const [isFullMatrixOpen, setIsFullMatrixOpen] = useState(false);
@@ -40,6 +43,21 @@ export default function AccessControl() {
     setSearchTerm('');
     setIsFilterOpen(false);
   };
+
+  // Real Dynamic Role Creation Handler
+  const handleRoleCreated = (newRole: Role, permissionsArray: boolean[]) => {
+    setRoles(prev => [newRole, ...prev]);
+    mockPermissionMatrix[newRole.name] = permissionsArray;
+  };
+
+  // Real Dynamic Access Assignment Handler
+  const handleAssignAccess = (_userName: string, roleName: string, _resource: string, _department: string) => {
+    setRoles(prev =>
+      prev.map(r => (r.name === roleName ? { ...r, usersCount: r.usersCount + 1 } : r))
+    );
+  };
+
+  const totalUsersCount = roles.reduce((sum, r) => sum + r.usersCount, 0);
 
   return (
     <div className="max-w-[1600px] mx-auto space-y-6 pb-8 animate-in fade-in duration-300">
@@ -80,7 +98,11 @@ export default function AccessControl() {
         </div>
       </div>
 
-      <AccessStats />
+      {/* Dynamic KPI Cards */}
+      <AccessStats 
+        rolesCount={roles.length}
+        usersCount={totalUsersCount}
+      />
 
       {/* Tabs and Search / Filter Controls */}
       <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
@@ -209,6 +231,8 @@ export default function AccessControl() {
       {activeTab === 'Roles' && (
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           <RolesTable 
+            roles={roles}
+            onRolesChange={setRoles}
             onViewAllRoles={() => setActiveTab('Roles')}
             searchTerm={searchTerm}
             statusFilter={statusFilter}
@@ -237,12 +261,15 @@ export default function AccessControl() {
         </div>
       )}
 
-      {/* All Access Modals */}
+      {/* All Access Modals with Active Creation & Assignment */}
       <AccessModals 
         createRoleOpen={createRoleOpen}
         setCreateRoleOpen={setCreateRoleOpen}
         assignAccessOpen={assignAccessOpen}
         setAssignAccessOpen={setAssignAccessOpen}
+        roles={roles}
+        onRoleCreated={handleRoleCreated}
+        onAssignAccess={handleAssignAccess}
       />
 
       {/* Comprehensive Permission Matrix Modal */}

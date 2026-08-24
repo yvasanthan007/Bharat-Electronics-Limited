@@ -1,15 +1,22 @@
 import { useState, useRef, useEffect } from 'react';
 import { MoreVertical, ShieldCheck, Users, Key, Edit3, UserCheck, Copy, Power, Trash2, CheckCircle2, ShieldAlert } from 'lucide-react';
-import { mockRoles, type Role } from '../data/mockData';
+import type { Role } from '../data/mockData';
 
 interface RolesTableProps {
+  roles?: Role[];
+  onRolesChange?: (roles: Role[]) => void;
   onViewAllRoles?: () => void;
   searchTerm?: string;
   statusFilter?: string;
 }
 
-export default function RolesTable({ onViewAllRoles, searchTerm = '', statusFilter = 'All' }: RolesTableProps) {
-  const [rolesList, setRolesList] = useState<Role[]>(mockRoles);
+export default function RolesTable({
+  roles = [],
+  onRolesChange,
+  onViewAllRoles,
+  searchTerm = '',
+  statusFilter = 'All'
+}: RolesTableProps) {
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [selectedRoleMembers, setSelectedRoleMembers] = useState<Role | null>(null);
   const [editingRole, setEditingRole] = useState<Role | null>(null);
@@ -25,7 +32,7 @@ export default function RolesTable({ onViewAllRoles, searchTerm = '', statusFilt
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const filteredRoles = rolesList.filter(role => {
+  const filteredRoles = roles.filter(role => {
     const matchesSearch = !searchTerm.trim() || 
       role.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       role.description.toLowerCase().includes(searchTerm.toLowerCase());
@@ -34,9 +41,10 @@ export default function RolesTable({ onViewAllRoles, searchTerm = '', statusFilt
   });
 
   const handleToggleStatus = (roleId: string) => {
-    setRolesList(prev =>
-      prev.map(r => (r.id === roleId ? { ...r, status: r.status === 'Active' ? 'Inactive' : 'Active' } : r))
-    );
+    if (onRolesChange) {
+      const updated = roles.map(r => (r.id === roleId ? { ...r, status: r.status === 'Active' ? ('Inactive' as const) : ('Active' as const) } : r));
+      onRolesChange(updated);
+    }
     setActiveMenuId(null);
   };
 
@@ -48,14 +56,17 @@ export default function RolesTable({ onViewAllRoles, searchTerm = '', statusFilt
       description: `Cloned policy from ${role.name}`,
       usersCount: 0,
     };
-    setRolesList(prev => [...prev, cloned]);
+    if (onRolesChange) {
+      onRolesChange([cloned, ...roles]);
+    }
     setActiveMenuId(null);
-    alert(`Role "${cloned.name}" duplicated successfully.`);
   };
 
   const handleDeleteRole = (roleId: string, roleName: string) => {
     if (confirm(`Are you sure you want to revoke and delete the role "${roleName}"?`)) {
-      setRolesList(prev => prev.filter(r => r.id !== roleId));
+      if (onRolesChange) {
+        onRolesChange(roles.filter(r => r.id !== roleId));
+      }
       setActiveMenuId(null);
     }
   };
@@ -63,7 +74,9 @@ export default function RolesTable({ onViewAllRoles, searchTerm = '', statusFilt
   const handleSaveEdit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingRole) return;
-    setRolesList(prev => prev.map(r => r.id === editingRole.id ? editingRole : r));
+    if (onRolesChange) {
+      onRolesChange(roles.map(r => r.id === editingRole.id ? editingRole : r));
+    }
     setEditingRole(null);
   };
 
