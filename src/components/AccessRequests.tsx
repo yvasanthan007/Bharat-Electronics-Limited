@@ -2,8 +2,13 @@ import { useState } from 'react';
 import { MoreVertical, Shield, ShieldAlert, ShieldCheck, Check, X } from 'lucide-react';
 import { mockAccessRequests, type AccessRequest } from '../data/mockData';
 
-export default function AccessRequests() {
+interface AccessRequestsProps {
+  searchTerm?: string;
+}
+
+export default function AccessRequests({ searchTerm = '' }: AccessRequestsProps) {
   const [requestsList, setRequestsList] = useState<AccessRequest[]>(mockAccessRequests);
+  const [statusFilter, setStatusFilter] = useState<'All' | 'Pending' | 'Approved' | 'Rejected'>('All');
 
   const handleApprove = (id: string) => {
     setRequestsList(prev =>
@@ -16,6 +21,15 @@ export default function AccessRequests() {
       prev.map(r => (r.id === id ? { ...r, status: 'Rejected' } : r))
     );
   };
+
+  const filteredRequests = requestsList.filter(req => {
+    const matchesStatus = statusFilter === 'All' || req.status === statusFilter;
+    const matchesSearch = !searchTerm.trim() ||
+      req.user.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      req.requestedAccess.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      req.resource.toLowerCase().includes(searchTerm.toLowerCase());
+    return matchesStatus && matchesSearch;
+  });
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -45,16 +59,30 @@ export default function AccessRequests() {
     }
   };
 
+  const pendingCount = requestsList.filter(r => r.status === 'Pending').length;
+
   return (
     <div className="bg-white rounded-2xl shadow-xs border border-slate-200 overflow-hidden">
-      <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+      <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-base font-bold text-slate-900">Recent Access Requests</h2>
+          <h2 className="text-base font-bold text-slate-900">Access Requests Ledger</h2>
           <p className="text-xs text-slate-500">Real-time Zero-Trust role elevation requests requiring administrator quorum approval</p>
         </div>
-        <span className="text-xs font-mono font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full border border-blue-200">
-          {requestsList.filter(r => r.status === 'Pending').length} Pending Review
-        </span>
+        <div className="flex items-center gap-2">
+          {(['All', 'Pending', 'Approved', 'Rejected'] as const).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setStatusFilter(tab)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                statusFilter === tab
+                  ? 'bg-blue-600 text-white shadow-2xs'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              {tab} {tab === 'Pending' ? `(${pendingCount})` : ''}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="overflow-x-auto flex-1">
@@ -70,11 +98,11 @@ export default function AccessRequests() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {requestsList.map((request: AccessRequest) => (
+            {filteredRequests.map((request: AccessRequest) => (
               <tr key={request.id} className="hover:bg-slate-50/60 transition-colors">
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-xl bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-xs shadow-2xs">
+                    <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs shadow-2xs">
                       {request.user.charAt(0)}
                     </div>
                     <div>
@@ -117,6 +145,11 @@ export default function AccessRequests() {
             ))}
           </tbody>
         </table>
+        {filteredRequests.length === 0 && (
+          <div className="p-8 text-center text-xs text-slate-400">
+            No access requests matching current status and search filters.
+          </div>
+        )}
       </div>
     </div>
   );
