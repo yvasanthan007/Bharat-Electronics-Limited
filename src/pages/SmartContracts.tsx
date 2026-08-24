@@ -1,25 +1,39 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { 
   RotateCw, 
   ChevronLeft, 
   ChevronRight, 
   CheckCircle2, 
-  Rocket 
+  Rocket,
+  AlertCircle 
 } from 'lucide-react';
 import StatCard from '../components/StatCard';
 import ContractFilterBar from '../components/contracts/ContractFilterBar';
 import ContractTable from '../components/contracts/ContractTable';
 import ContractDetailsDrawer from '../components/contracts/ContractDetailsDrawer';
 import DeployContractModal from '../components/contracts/DeployContractModal';
+import { type SmartContractItem } from '../data/contractData';
 import { 
-  contractStats, 
-  contractsMock, 
-  type SmartContractItem 
-} from '../data/contractData';
+  getSmartContracts, 
+  getContractStatistics, 
+  subscribeToSmartContracts, 
+  type ContractStatsResult 
+} from '../services/smartContractService';
 
 export default function SmartContracts() {
-  const [contracts, setContracts] = useState<SmartContractItem[]>(contractsMock);
-  
+  // Data State
+  const [contracts, setContracts] = useState<SmartContractItem[]>([]);
+  const [stats, setStats] = useState<ContractStatsResult[]>([
+    { title: 'Total Contracts', value: '...', growth: '...', description: 'Across 4 supported networks', icon: 'Code2' },
+    { title: 'Active Contracts', value: '...', growth: '...', description: 'Operational & responsive', icon: 'CheckCircle2' },
+    { title: 'Verified Contracts', value: '...', growth: '...', description: 'Source code & ABI verified', icon: 'ShieldCheck' },
+    { title: 'Transactions', value: '...', growth: '...', description: 'Total on-chain contract calls', icon: 'Activity' }
+  ]);
+  const [totalFilteredCount, setTotalFilteredCount] = useState(0);
+  const [totalTotalCount, setTotalTotalCount] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   // Filters State
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('All Statuses');
@@ -46,6 +60,59 @@ export default function SmartContracts() {
     return count;
   }, [searchQuery, selectedStatus, selectedNetwork, selectedVerification, selectedType]);
 
+  // Load contracts from Firestore
+  const loadContractsData = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setIsRefreshing(true);
+    else setIsLoading(true);
+    setError(null);
+
+    try {
+      const [contractsRes, statsRes] = await Promise.all([
+        getSmartContracts({
+          searchQuery,
+          status: selectedStatus,
+          network: selectedNetwork,
+          verification: selectedVerification,
+          type: selectedType,
+          page: currentPage,
+          pageSize,
+        }),
+        getContractStatistics(),
+      ]);
+
+      setContracts(contractsRes.contracts);
+      setTotalFilteredCount(contractsRes.totalFilteredCount);
+      setTotalTotalCount(contractsRes.totalTotalCount);
+      setStats(statsRes);
+    } catch (err: any) {
+      console.error('Error loading smart contracts:', err);
+      setError('Unable to load contracts from database. Showing fallback data.');
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  }, [
+    searchQuery,
+    selectedStatus,
+    selectedNetwork,
+    selectedVerification,
+    selectedType,
+    currentPage,
+    pageSize,
+  ]);
+
+  useEffect(() => {
+    loadContractsData();
+  }, [loadContractsData]);
+
+  // Real-time updates subscription
+  useEffect(() => {
+    const unsubscribe = subscribeToSmartContracts(() => {
+      getContractStatistics().then(setStats).catch(() => {});
+    });
+    return () => unsubscribe();
+  }, []);
+
   const handleClearFilters = () => {
     setSearchQuery('');
     setSelectedStatus('All Statuses');
@@ -56,66 +123,17 @@ export default function SmartContracts() {
   };
 
   const handleRefresh = () => {
-    setIsRefreshing(true);
-    setTimeout(() => {
-      setIsRefreshing(false);
-    }, 600);
+    loadContractsData(true);
   };
 
   const handleDeploySuccess = (newContract: SmartContractItem) => {
     setContracts((prev) => [newContract, ...prev]);
     setSelectedContract(newContract);
     setIsDrawerOpen(true);
+    loadContractsData(true);
   };
 
-  // Filter Logic
-  const filteredContracts = useMemo(() => {
-    return contracts.filter((item) => {
-      // Search match (Name, address, symbol, network, description)
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matchesName = item.name.toLowerCase().includes(q);
-        const matchesAddress = item.address.toLowerCase().includes(q);
-        const matchesSymbol = item.symbol.toLowerCase().includes(q);
-        const matchesNetwork = item.network.toLowerCase().includes(q);
-        const matchesDesc = item.description.toLowerCase().includes(q);
-        const matchesType = item.type.toLowerCase().includes(q);
-
-        if (!matchesName && !matchesAddress && !matchesSymbol && !matchesNetwork && !matchesDesc && !matchesType) {
-          return false;
-        }
-      }
-
-      // Status
-      if (selectedStatus !== 'All Statuses' && item.status !== selectedStatus) {
-        return false;
-      }
-
-      // Network
-      if (selectedNetwork !== 'All Networks' && item.network !== selectedNetwork) {
-        return false;
-      }
-
-      // Verification
-      if (selectedVerification !== 'All Verification' && item.verification.status !== selectedVerification) {
-        return false;
-      }
-
-      // Contract Type
-      if (selectedType !== 'All Types' && item.type !== selectedType) {
-        return false;
-      }
-
-      return true;
-    });
-  }, [contracts, searchQuery, selectedStatus, selectedNetwork, selectedVerification, selectedType]);
-
-  // Paginated View
-  const totalPages = Math.max(1, Math.ceil(filteredContracts.length / pageSize));
-  const paginatedContracts = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filteredContracts.slice(start, start + pageSize);
-  }, [filteredContracts, currentPage, pageSize]);
+  const totalPages = Math.max(1, Math.ceil(totalFilteredCount / pageSize));
 
   const handleSelectContract = (contract: SmartContractItem) => {
     setSelectedContract(contract);
@@ -142,7 +160,7 @@ export default function SmartContracts() {
         <div className="flex items-center gap-3 shrink-0">
           <button
             onClick={handleRefresh}
-            className="p-2.5 bg-white hover:bg-slate-50 text-slate-600 hover:text-slate-900 border border-slate-200 rounded-lg transition-colors shadow-sm"
+            className="p-2.5 bg-white hover:bg-slate-50 text-slate-600 hover:text-slate-900 border border-slate-200 rounded-lg transition-colors shadow-sm cursor-pointer"
             title="Refresh Smart Contracts"
           >
             <RotateCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-blue-600' : ''}`} />
@@ -150,7 +168,7 @@ export default function SmartContracts() {
 
           <button
             onClick={() => setIsDeployModalOpen(true)}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm"
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm cursor-pointer"
           >
             <Rocket className="w-4 h-4" />
             Deploy Contract
@@ -158,9 +176,17 @@ export default function SmartContracts() {
         </div>
       </div>
 
+      {/* Error notification if any */}
+      {error && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-xl flex items-center gap-2 text-sm">
+          <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
       {/* 4 Compact Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        {contractStats.map((stat, index) => (
+        {stats.map((stat, index) => (
           <StatCard key={index} {...stat} />
         ))}
       </div>
@@ -199,20 +225,32 @@ export default function SmartContracts() {
       />
 
       {/* Contracts Table / Card Grid */}
-      <ContractTable
-        contracts={paginatedContracts}
-        onSelectContract={handleSelectContract}
-        selectedContractId={selectedContract?.id}
-        viewMode={viewMode}
-      />
+      {isLoading && !isRefreshing ? (
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-12 text-center text-slate-500">
+          <div className="inline-block w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-3"></div>
+          <p className="font-semibold text-slate-700">Loading smart contracts from database...</p>
+          <p className="text-xs text-slate-400 mt-1">Retrieving deployed contracts, ABI specifications, and security audits</p>
+        </div>
+      ) : (
+        <ContractTable
+          contracts={contracts}
+          onSelectContract={handleSelectContract}
+          selectedContractId={selectedContract?.id}
+          viewMode={viewMode}
+        />
+      )}
 
       {/* Pagination Bar */}
       <div className="bg-white px-5 py-3.5 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4 text-xs font-medium text-slate-600">
         <div className="flex items-center gap-3">
           <span>
-            Showing <strong className="font-semibold text-slate-900">{filteredContracts.length > 0 ? (currentPage - 1) * pageSize + 1 : 0}</strong>–
-            <strong className="font-semibold text-slate-900">{Math.min(currentPage * pageSize, filteredContracts.length)}</strong> of{' '}
-            <strong className="font-semibold text-slate-900">{filteredContracts.length < contracts.length ? `${filteredContracts.length} filtered (${contracts.length} total)` : `${contracts.length}`}</strong> contracts
+            Showing <strong className="font-semibold text-slate-900">{totalFilteredCount > 0 ? (currentPage - 1) * pageSize + 1 : 0}</strong>–
+            <strong className="font-semibold text-slate-900">{Math.min(currentPage * pageSize, totalFilteredCount)}</strong> of{' '}
+            <strong className="font-semibold text-slate-900">
+              {totalFilteredCount < totalTotalCount
+                ? `${totalFilteredCount} filtered (${totalTotalCount} total)`
+                : `${totalTotalCount}`}
+            </strong> contracts
           </span>
 
           <div className="flex items-center gap-1.5 ml-2 border-l border-slate-200 pl-3">
