@@ -1,35 +1,45 @@
 import { useState } from 'react';
-import { Clock, Calendar, Mail, Plus, Play } from 'lucide-react';
+import { Clock, Calendar, Mail, Plus, Play, CheckCircle2 } from 'lucide-react';
 import type { ScheduledReport } from '../../services/reports';
 import Badge from '../common/Badge';
 
 interface ScheduledReportsSectionProps {
   schedules: ScheduledReport[];
   onToggleSchedule: (id: string) => void;
+  onRunSchedule?: (id: string) => Promise<void>;
   onAddSchedule?: () => void;
 }
 
 export default function ScheduledReportsSection({
   schedules,
   onToggleSchedule,
+  onRunSchedule,
   onAddSchedule,
 }: ScheduledReportsSectionProps) {
   const [runningJobId, setRunningJobId] = useState<string | null>(null);
+  const [justCompletedId, setJustCompletedId] = useState<string | null>(null);
 
-  const handleTriggerInstant = (id: string) => {
+  const handleTriggerInstant = async (id: string) => {
     setRunningJobId(id);
-    setTimeout(() => {
+    try {
+      if (onRunSchedule) {
+        await onRunSchedule(id);
+      }
+      setJustCompletedId(id);
+      setTimeout(() => setJustCompletedId(null), 3000);
+    } catch (e) {
+      console.error('Error running schedule', e);
+    } finally {
       setRunningJobId(null);
-      alert(`Automated report job ${id} executed successfully and dispatched to configured recipients.`);
-    }, 800);
+    }
   };
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-6 space-y-5">
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs p-6 space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <h3 className="text-base font-semibold text-slate-900">Automated Recurring Schedules</h3>
+            <h3 className="text-base font-bold text-slate-900">Automated Recurring Schedules</h3>
             <Badge variant="purple" size="sm">
               {schedules.filter((s) => s.active).length} Active Jobs
             </Badge>
@@ -42,7 +52,7 @@ export default function ScheduledReportsSection({
         {onAddSchedule && (
           <button
             onClick={onAddSchedule}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold shadow-xs transition-all self-start sm:self-auto"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-2xs transition-all self-start sm:self-auto cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
             Create Schedule
@@ -54,16 +64,16 @@ export default function ScheduledReportsSection({
         {schedules.map((schedule) => (
           <div
             key={schedule.id}
-            className={`p-4 rounded-xl border transition-all ${
+            className={`p-4 rounded-2xl border transition-all ${
               schedule.active
-                ? 'bg-slate-50/70 border-slate-200 hover:border-slate-300'
+                ? 'bg-slate-50/70 border-slate-200 hover:border-slate-300 shadow-2xs'
                 : 'bg-slate-50/30 border-slate-200/60 opacity-75'
             }`}
           >
             <div className="flex items-start justify-between gap-3 mb-2.5">
               <div>
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="font-mono text-[10px] font-bold text-slate-500 bg-white px-1.5 py-0.5 rounded border border-slate-200">
+                  <span className="font-mono text-[10px] font-bold text-slate-500 bg-white px-2 py-0.5 rounded-md border border-slate-200">
                     {schedule.id}
                   </span>
                   <Badge
@@ -76,14 +86,14 @@ export default function ScheduledReportsSection({
                     }
                     size="sm"
                   >
-                    <Clock className="w-3.5 h-3.5" />
+                    <Clock className="w-3 h-3" />
                     {schedule.frequency}
                   </Badge>
-                  <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-white text-slate-700 border border-slate-200">
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white text-slate-700 border border-slate-200">
                     {schedule.format}
                   </span>
                 </div>
-                <h4 className="text-sm font-semibold text-slate-900 leading-snug">
+                <h4 className="text-sm font-bold text-slate-900 leading-snug">
                   {schedule.title}
                 </h4>
               </div>
@@ -98,7 +108,7 @@ export default function ScheduledReportsSection({
                 }`}
               >
                 <span
-                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-xs ring-0 transition duration-200 ${
+                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-2xs ring-0 transition duration-200 ${
                     schedule.active ? 'translate-x-4' : 'translate-x-0'
                   }`}
                 />
@@ -106,27 +116,39 @@ export default function ScheduledReportsSection({
             </div>
 
             {/* Recipient tags */}
-            <div className="space-y-2 pt-2 border-t border-slate-200/60 text-xs">
-              <div className="flex items-center gap-1.5 text-slate-500">
+            <div className="space-y-2 pt-2.5 border-t border-slate-200/60 text-xs">
+              <div className="flex items-center gap-1.5 text-slate-600">
                 <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                <span className="truncate max-w-[280px]">
+                <span className="truncate max-w-[280px] font-mono text-[11px]">
                   {schedule.recipients.join(', ')}
                 </span>
               </div>
 
               <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1">
-                <span className="flex items-center gap-1 text-slate-600 font-medium">
+                <span className="flex items-center gap-1 text-slate-500 font-medium">
                   <Calendar className="w-3 h-3 text-slate-400" />
-                  Next: {schedule.nextRun}
+                  Last run: <strong className="text-slate-700">{schedule.lastGenerated || 'Pending'}</strong>
                 </span>
 
                 <button
                   disabled={runningJobId === schedule.id}
                   onClick={() => handleTriggerInstant(schedule.id)}
-                  className="flex items-center gap-1 text-blue-600 hover:text-blue-700 font-semibold transition-colors disabled:opacity-50"
+                  className={`flex items-center gap-1.5 text-xs font-bold transition-all px-2.5 py-1 rounded-lg cursor-pointer ${
+                    justCompletedId === schedule.id
+                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                      : 'bg-white border border-slate-200 text-blue-600 hover:bg-blue-50 hover:text-blue-700 shadow-2xs'
+                  } disabled:opacity-50`}
                 >
                   {runningJobId === schedule.id ? (
-                    'Executing...'
+                    <>
+                      <span className="w-3 h-3 border-2 border-blue-600/30 border-t-blue-600 rounded-full animate-spin" />
+                      Executing...
+                    </>
+                  ) : justCompletedId === schedule.id ? (
+                    <>
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                      Executed!
+                    </>
                   ) : (
                     <>
                       <Play className="w-3 h-3 fill-current" />

@@ -15,13 +15,15 @@ import {
   getScheduledReports,
   generateReport,
   deleteReport,
-  toggleScheduledReport
+  toggleScheduledReport,
+  triggerScheduledReport,
 } from '../services/reports';
 import type {
   ReportItem,
   ReportStats,
   ScheduledReport
 } from '../services/reports';
+import { downloadReportFile } from '../utils/pdfGenerator';
 import ReportStatsCards from '../components/reports/ReportStatsCards';
 import ReportsOverviewCharts from '../components/reports/ReportsOverviewCharts';
 import ReportsTable from '../components/reports/ReportsTable';
@@ -88,10 +90,17 @@ export default function Reports() {
     try {
       const newReport = await generateReport(params);
       setReports((prev) => [newReport, ...prev]);
+
+      if (params.autoDownload !== false) {
+        downloadReportFile(newReport);
+      }
+
+      setSelectedReport(newReport);
+
       addToast(
         'success',
-        'Report Generated & Sealed',
-        `Report "${newReport.name}" (${newReport.format}) created with on-chain cryptographic proof.`
+        'Report Generated & Exported',
+        `Report "${newReport.name}" (${newReport.format}) created with cryptographic seal and exported.`
       );
     } catch (err) {
       addToast('error', 'Generation Failed', 'Could not compile on-chain report.');
@@ -110,19 +119,43 @@ export default function Reports() {
   };
 
   const handleDownload = (report: ReportItem) => {
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(report, null, 2));
-    const downloadAnchor = document.createElement('a');
-    downloadAnchor.setAttribute("href", dataStr);
-    downloadAnchor.setAttribute("download", `${report.id}_${report.name.replace(/\s+/g, '_')}.${report.format.toLowerCase()}`);
-    document.body.appendChild(downloadAnchor);
-    downloadAnchor.click();
-    downloadAnchor.remove();
+    try {
+      downloadReportFile(report);
+      addToast(
+        'success',
+        `${report.format} Exported Successfully`,
+        `Report "${report.name}" (${report.format}) generated and downloaded.`
+      );
+    } catch (err: any) {
+      console.error('Download error:', err);
+      addToast(
+        'error',
+        'Download Failed',
+        `Could not generate ${report.format} document: ${err.message || 'Unknown error'}`
+      );
+    }
+  };
 
-    addToast(
-      'success',
-      'Download Started',
-      `Downloading ${report.format} archive for "${report.name}".`
-    );
+  const handleRunSchedule = async (id: string) => {
+    try {
+      const result = await triggerScheduledReport(id);
+      if (result) {
+        setReports((prev) => [result.report, ...prev]);
+        setSchedules((prev) =>
+          prev.map((s) => (s.id === id ? { ...s, lastGenerated: 'Just now' } : s))
+        );
+
+        downloadReportFile(result.report);
+
+        addToast(
+          'success',
+          'Automated Job Executed & Downloaded',
+          `Report "${result.report.name}" (${result.report.format}) generated, downloaded, and dispatched to ${result.schedule.recipients.join(', ')}.`
+        );
+      }
+    } catch (err) {
+      addToast('error', 'Execution Failed', `Could not trigger scheduled job ${id}.`);
+    }
   };
 
   const handleExportAll = () => {
@@ -376,6 +409,7 @@ export default function Reports() {
           <ScheduledReportsSection
             schedules={schedules}
             onToggleSchedule={handleToggleSchedule}
+            onRunSchedule={handleRunSchedule}
             onAddSchedule={() => setIsGenerateModalOpen(true)}
           />
         </div>
