@@ -1,9 +1,9 @@
 import { useState, type FormEvent } from 'react';
-import { Wallet, ShieldCheck, Lock, CheckCircle2, ArrowRight, UserCheck } from 'lucide-react';
+import { Wallet, ShieldCheck, Lock, CheckCircle2, ArrowRight, Mail } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const AuthCard = () => {
-  const [employeeId, setEmployeeId] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -17,28 +17,28 @@ const AuthCard = () => {
 
     setTimeout(() => {
       setIsLoading(false);
-      const isEmployeeMatch = employeeId.trim() === 'BEL001' && password === 'bel123';
-      const isAdminMatch =
-        employeeId.trim().toLowerCase() === 'rahul.verma@bel.co.in' && password === 'Admin@123';
+      const cleanId = identifier.trim().toLowerCase();
+      
+      const isAdminMatch = 
+        (cleanId === 'bel.admin@gmail' || cleanId === 'bel.admin@gmail.com' || cleanId === 'admin') && 
+        password === 'beladmin0';
 
-      if (isEmployeeMatch || isAdminMatch) {
+      const isLegacyMatch = 
+        (cleanId === 'bel001' && password === 'bel123') ||
+        (cleanId === 'rahul.verma@bel.co.in' && password === 'Admin@123');
+
+      if (isAdminMatch || isLegacyMatch) {
         localStorage.setItem('bel_user', JSON.stringify({
-          name: 'Rahul Verma',
-          email: 'rahul.verma@bel.co.in',
+          name: 'BEL Admin',
+          email: 'bel.admin@gmail',
           role: 'Administrator',
-          did: 'did:bel:7f82e391a3b909f1'
+          did: 'did:bel:sov:admin01'
         }));
         navigate('/bel');
       } else {
-        setError('Invalid Employee ID/Email or password. Use BEL001 / bel123 or rahul.verma@bel.co.in / Admin@123');
+        setError('Invalid ID/Email or password.');
       }
-    }, 600);
-  };
-
-  const handleDemoFill = () => {
-    setEmployeeId('BEL001');
-    setPassword('bel123');
-    setError('');
+    }, 500);
   };
 
   const handleWalletConnect = () => {
@@ -46,13 +46,13 @@ const AuthCard = () => {
     setTimeout(() => {
       setIsWalletLoading(false);
       localStorage.setItem('bel_user', JSON.stringify({
-        name: 'Defense Hardware Signer',
-        email: 'vault.signer@bel.co.in',
+        name: 'BEL Admin',
+        email: 'bel.admin@gmail',
         role: 'Administrator',
-        did: 'did:bel:7f82c4412f9e110b'
+        did: 'did:bel:sov:admin01'
       }));
       navigate('/bel');
-    }, 800);
+    }, 700);
   };
 
   return (
@@ -64,26 +64,6 @@ const AuthCard = () => {
         <h2 className="text-2xl font-bold text-slate-900 tracking-tight">BEL Trust Platform</h2>
         <h3 className="text-lg font-medium text-slate-700 mt-1">Welcome to BEL</h3>
         <p className="text-sm text-slate-500 mt-2">Sign in to your secure workspace</p>
-      </div>
-
-      {/* Quick Demo Credentials Pill */}
-      <div className="mb-6 p-3 rounded-xl bg-blue-50/70 border border-blue-100 flex items-center justify-between text-xs">
-        <div className="space-y-0.5">
-          <div className="font-bold text-blue-900 flex items-center gap-1">
-            <UserCheck className="w-3.5 h-3.5 text-blue-600" />
-            <span>Default Credentials</span>
-          </div>
-          <p className="text-blue-700 font-mono text-[11px]">
-            User: <strong>BEL001</strong> | Pass: <strong>bel123</strong>
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={handleDemoFill}
-          className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold text-[11px] transition-colors cursor-pointer shadow-2xs"
-        >
-          Auto Fill
-        </button>
       </div>
 
       <button
@@ -110,18 +90,21 @@ const AuthCard = () => {
         )}
         
         <div className="space-y-1">
-          <label className="text-sm font-semibold text-slate-700" htmlFor="employeeId">
-            Employee ID / Email
+          <label className="text-sm font-semibold text-slate-700" htmlFor="identifier">
+            ID / Email
           </label>
-          <input
-            id="employeeId"
-            type="text"
-            placeholder="e.g. BEL001 or rahul.verma@bel.co.in"
-            value={employeeId}
-            onChange={(e) => setEmployeeId(e.target.value)}
-            required
-            className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm placeholder:text-slate-400"
-          />
+          <div className="relative">
+            <input
+              id="identifier"
+              type="text"
+              placeholder="Enter your ID or Email"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
+              required
+              className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm placeholder:text-slate-400"
+            />
+            <Mail className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          </div>
         </div>
 
         <div className="space-y-1">
@@ -132,7 +115,7 @@ const AuthCard = () => {
             <input
               id="password"
               type="password"
-              placeholder="e.g. bel123"
+              placeholder="Enter your password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
