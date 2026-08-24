@@ -1,7 +1,7 @@
 export interface Transaction {
   hash: string;
   date: string;
-  type: 'Sent' | 'Received' | 'Swap' | 'Bridge' | 'Stake' | 'Unstake' | 'Mint' | 'Burn';
+  type: 'Sent' | 'Received' | 'Swap' | 'Bridge' | 'Stake' | 'Unstake' | 'Mint' | 'Burn' | 'Contract Call';
   asset: string;
   network: string;
   from: string;
@@ -31,7 +31,7 @@ export const getTransactions = async (): Promise<Transaction[]> => {
     const isPending = i % 7 === 0;
     const types: Transaction['type'][] = ['Sent', 'Received', 'Swap', 'Bridge', 'Stake'];
     const type = types[i % types.length];
-    
+
     return {
       hash: `0x${Math.random().toString(16).slice(2, 64).padEnd(64, '0')}`,
       date: new Date(Date.now() - Math.random() * 1000 * 60 * 60 * 24 * 30).toISOString(),

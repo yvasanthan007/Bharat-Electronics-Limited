@@ -1,9 +1,9 @@
 import { useState, useMemo } from 'react';
-import { 
-  Download, 
-  RotateCw, 
-  ChevronLeft, 
-  ChevronRight, 
+import {
+  Download,
+  RotateCw,
+  ChevronLeft,
+  ChevronRight,
   CheckCircle2
 } from 'lucide-react';
 import StatCard from '../components/StatCard';
@@ -12,6 +12,7 @@ import AuditTable from '../components/audit/AuditTable';
 import AuditDetailsDrawer from '../components/audit/AuditDetailsDrawer';
 import ExportLogsModal from '../components/audit/ExportLogsModal';
 import { auditStats, auditEventsMock, type AuditLogEvent } from '../data/auditData';
+import { getDIDAuditEvents } from '../lib/did/eventMappers';
 
 export default function AuditTrail() {
   // Filters State
@@ -30,6 +31,12 @@ export default function AuditTrail() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+
+  // Merge live DID/blockchain ledger events with platform audit events
+  const allEvents: AuditLogEvent[] = useMemo(
+    () => [...getDIDAuditEvents(), ...auditEventsMock],
+    []
+  );
 
   const activeFilterCount = useMemo(() => {
     let count = 0;
@@ -71,7 +78,7 @@ export default function AuditTrail() {
 
   // Filter Logic
   const filteredEvents = useMemo(() => {
-    return auditEventsMock.filter((item) => {
+    return allEvents.filter((item) => {
       // Search matching (Event ID, Actor, Wallet, Tx, Resource, IP)
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
@@ -116,6 +123,7 @@ export default function AuditTrail() {
       return true;
     });
   }, [
+    allEvents,
     searchQuery,
     selectedEventType,
     selectedActor,
@@ -233,7 +241,7 @@ export default function AuditTrail() {
           <span>
             Showing <strong className="font-semibold text-slate-900">{filteredEvents.length > 0 ? (currentPage - 1) * pageSize + 1 : 0}</strong>–
             <strong className="font-semibold text-slate-900">{Math.min(currentPage * pageSize, filteredEvents.length)}</strong> of{' '}
-            <strong className="font-semibold text-slate-900">{filteredEvents.length < auditEventsMock.length ? `${filteredEvents.length} filtered (${auditStats[0].value} total)` : `${auditStats[0].value}`}</strong> events
+            <strong className="font-semibold text-slate-900">{filteredEvents.length < allEvents.length ? `${filteredEvents.length} filtered (${allEvents.length} total)` : `${allEvents.length}`}</strong> events
           </span>
 
           <div className="flex items-center gap-1.5 ml-2 border-l border-slate-200 pl-3">
@@ -268,11 +276,10 @@ export default function AuditTrail() {
             <button
               key={pageNum}
               onClick={() => setCurrentPage(pageNum)}
-              className={`w-7 h-7 rounded-lg text-xs font-semibold transition-colors ${
-                currentPage === pageNum
+              className={`w-7 h-7 rounded-lg text-xs font-semibold transition-colors ${currentPage === pageNum
                   ? 'bg-blue-600 text-white'
                   : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-              }`}
+                }`}
             >
               {pageNum}
             </button>

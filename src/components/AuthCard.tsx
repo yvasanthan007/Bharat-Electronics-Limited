@@ -1,10 +1,11 @@
 import { useState, type FormEvent } from 'react';
 import { Wallet, ShieldCheck, Lock, CheckCircle2, ArrowRight, Mail, UserCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useWallet } from '../context/WalletContext';
 import { auth, db } from '../lib/firebase';
-import { 
-  createUserWithEmailAndPassword, 
-  signInWithEmailAndPassword 
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword
 } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
@@ -15,7 +16,7 @@ const AuthCard = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isWalletLoading, setIsWalletLoading] = useState(false);
+  const { isConnecting: isWalletLoading, error: walletError, isConnected: walletConnected, connect: connectWallet } = useWallet();
   const navigate = useNavigate();
 
   const handleAuth = async (e: FormEvent) => {
@@ -28,7 +29,7 @@ const AuthCard = () => {
         // 1. Create user in Firebase Auth
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
-        
+
         // 2. Save additional user details in Firestore
         await setDoc(doc(db, 'users', user.uid), {
           employeeId: employeeId,
@@ -41,7 +42,7 @@ const AuthCard = () => {
         // Log in user
         await signInWithEmailAndPassword(auth, email, password);
       }
-      
+
       setIsLoading(false);
       navigate('/bel');
     } catch (err: any) {
@@ -52,13 +53,18 @@ const AuthCard = () => {
     }
   };
 
-  const handleWalletConnect = () => {
-    setIsWalletLoading(true);
-    setTimeout(() => {
-      setIsWalletLoading(false);
-      setError('Wallet connection not available in this environment.');
-    }, 1000);
+  // Connects a real browser wallet (MetaMask) or falls back to an
+  // ephemeral demo wallet when no provider is available.
+  const handleWalletConnect = async () => {
+    try {
+      await connectWallet();
+      navigate('/bel');
+    } catch {
+      // Error state is surfaced through the wallet context
+    }
   };
+
+  const displayError = error || walletError;
 
   const toggleAuthMode = () => {
     setIsSignUp(!isSignUp);
@@ -86,11 +92,18 @@ const AuthCard = () => {
           <button
             onClick={handleWalletConnect}
             disabled={isWalletLoading || isLoading}
-            className="w-full flex items-center justify-center gap-2 bg-slate-50 hover:bg-slate-100 text-slate-700 font-medium py-3 px-4 rounded-xl border border-slate-200 transition-colors duration-200"
+            className="w-full flex items-center justify-center gap-2 bg-slate-50 hover:bg-slate-100 text-slate-700 font-medium py-3 px-4 rounded-xl border border-slate-200 transition-colors duration-200 disabled:opacity-60"
           >
             <Wallet className="w-5 h-5 text-slate-500" />
-            {isWalletLoading ? 'Connecting...' : 'Connect Wallet'}
+            {walletConnected ? 'Wallet Connected — Continue' : isWalletLoading ? 'Connecting...' : 'Connect Wallet'}
           </button>
+
+          {walletError && (
+            <p className="text-xs text-red-600 font-medium mt-2 flex items-start gap-1.5">
+              <span>⚠️</span>
+              <span>{walletError}</span>
+            </p>
+          )}
 
           <div className="relative flex py-6 items-center">
             <div className="flex-grow border-t border-slate-200"></div>
@@ -101,13 +114,13 @@ const AuthCard = () => {
       )}
 
       <form onSubmit={handleAuth} className="space-y-4">
-        {error && (
+        {displayError && (
           <div className="p-3 bg-red-50 border border-red-100 text-red-600 text-sm rounded-lg flex items-start gap-2">
             <span className="mt-0.5">⚠️</span>
-            <p>{error}</p>
+            <p>{displayError}</p>
           </div>
         )}
-        
+
         {isSignUp && (
           <div className="space-y-1">
             <label className="text-sm font-semibold text-slate-700" htmlFor="employeeId">
@@ -216,7 +229,7 @@ const AuthCard = () => {
           <span>Identity verification enabled</span>
         </div>
       </div>
-      
+
       <div className="mt-6 text-center border-t border-slate-100 pt-6">
         <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
           Authorized BEL personnel only
