@@ -3,6 +3,9 @@ import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
+import DigitalAssets from './pages/DigitalAssets';
+import Transactions from './pages/Transactions';
+import Identities from './pages/Identities';
 
 const BelLayout = () => (
   <div className="flex h-screen bg-slate-50 overflow-hidden">
@@ -24,6 +27,9 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/bel" element={<BelLayout />}>
           <Route index element={<Dashboard />} />
+          <Route path="digital-assets" element={<DigitalAssets />} />
+          <Route path="transactions" element={<Transactions />} />
+          <Route path="identities" element={<Identities />} />
           <Route path="*" element={<div className="flex items-center justify-center h-full text-slate-500">Coming Soon</div>} />
         </Route>
         {/* Legacy redirect for any existing links to /dashboard */}
