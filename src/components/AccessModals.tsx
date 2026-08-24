@@ -43,62 +43,66 @@ export default function AccessModals({
     );
   };
 
-  const handleCreateRole = (e: React.FormEvent) => {
+  const handleCreateRoleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!roleName.trim()) return;
+
     setIsCreatingRole(true);
+
+    const nameToSave = roleName.trim();
+    const descToSave = roleDescription.trim() || 'Custom security policy cluster';
+
+    const newRole: Role = {
+      id: `role-${Date.now()}`,
+      name: nameToSave,
+      description: descToSave,
+      usersCount: 0,
+      permissionsCount: selectedPerms.length > 0 ? selectedPerms.length : 1,
+      status: 'Active',
+    };
+
+    const permArray = mockPermissions.map(p => selectedPerms.includes(p));
+
+    if (onRoleCreated) {
+      onRoleCreated(newRole, permArray);
+    }
 
     setTimeout(() => {
       setIsCreatingRole(false);
-
-      const newRole: Role = {
-        id: `role-${Date.now()}`,
-        name: roleName.trim() || 'Custom Defense Role',
-        description: roleDescription.trim() || 'Custom security policy cluster',
-        usersCount: 0,
-        permissionsCount: selectedPerms.length,
-        status: 'Active',
-      };
-
-      const permArray = mockPermissions.map(p => selectedPerms.includes(p));
-
-      if (onRoleCreated) {
-        onRoleCreated(newRole, permArray);
-      }
-
       setCreateSuccess(true);
       setTimeout(() => {
         setCreateSuccess(false);
         setCreateRoleOpen(false);
         setRoleName('');
         setRoleDescription('');
-      }, 1200);
-    }, 600);
+      }, 1000);
+    }, 400);
   };
 
-  const handleAssignAccess = (e: React.FormEvent) => {
+  const handleAssignAccessSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!userName.trim()) return;
+
     setIsAssigning(true);
+
+    const targetUser = userName.trim();
+    const targetRole = selectedRole || (roles[0]?.name ?? 'Administrator');
+    const targetResource = resource.trim() || 'Defense Platform Master Node';
+
+    if (onAssignAccess) {
+      onAssignAccess(targetUser, targetRole, targetResource, department);
+    }
 
     setTimeout(() => {
       setIsAssigning(false);
-
-      if (onAssignAccess) {
-        onAssignAccess(
-          userName.trim() || 'Ravi Kishore',
-          selectedRole || (roles[0]?.name ?? 'Engineer'),
-          resource.trim() || 'Defense Platform Master Node',
-          department
-        );
-      }
-
       setAssignSuccess(true);
       setTimeout(() => {
         setAssignSuccess(false);
         setAssignAccessOpen(false);
         setUserName('');
         setResource('');
-      }, 1200);
-    }, 600);
+      }, 1000);
+    }, 400);
   };
 
   return (
@@ -107,7 +111,7 @@ export default function AccessModals({
       {createRoleOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="flex items-center justify-between p-6 border-b border-slate-100 bg-slate-50/50">
+            <div className="flex items-center justify-between p-5 border-b border-slate-100 bg-slate-50/50">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
                   <ShieldPlus className="w-5 h-5" />
@@ -118,6 +122,7 @@ export default function AccessModals({
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => setCreateRoleOpen(false)}
                 className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg transition-colors cursor-pointer"
               >
@@ -131,11 +136,11 @@ export default function AccessModals({
                   <div className="w-14 h-14 bg-emerald-100 rounded-2xl flex items-center justify-center mb-3">
                     <CheckCircle2 className="w-8 h-8 text-emerald-600" />
                   </div>
-                  <h3 className="text-base font-bold text-slate-900 mb-1">Role Created Successfully!</h3>
-                  <p className="text-xs text-slate-500">Role "{roleName}" is now active and added to the permission matrix.</p>
+                  <h3 className="text-base font-bold text-slate-900 mb-1">Role Created & Displayed!</h3>
+                  <p className="text-xs text-slate-500">Role "{roleName}" is now active in your Configured Roles list.</p>
                 </div>
               ) : (
-                <form id="create-role-form" onSubmit={handleCreateRole} className="space-y-4">
+                <form onSubmit={handleCreateRoleSubmit} className="space-y-4">
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold text-slate-700">Role Name</label>
                     <input
@@ -143,8 +148,9 @@ export default function AccessModals({
                       type="text"
                       value={roleName}
                       onChange={(e) => setRoleName(e.target.value)}
-                      placeholder="e.g. Compliance Officer Mk-II"
+                      placeholder="e.g. Compliance Lead, Security Auditor, Station Master"
                       className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+                      autoFocus
                     />
                   </div>
 
@@ -175,7 +181,7 @@ export default function AccessModals({
 
                   <div className="space-y-2 pt-1">
                     <div className="flex items-center justify-between">
-                      <label className="text-xs font-bold text-slate-700">Select Initial Permissions</label>
+                      <label className="text-xs font-bold text-slate-700">Select Permissions</label>
                       <span className="text-[11px] font-bold text-blue-600">{selectedPerms.length} selected</span>
                     </div>
                     <div className="border border-slate-200 rounded-xl p-3 max-h-40 overflow-y-auto space-y-2 bg-slate-50/50">
@@ -192,36 +198,34 @@ export default function AccessModals({
                       ))}
                     </div>
                   </div>
+
+                  {/* Form Submit Buttons directly inside form */}
+                  <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setCreateRoleOpen(false)}
+                      className="px-4 py-2 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isCreatingRole || !roleName.trim()}
+                      className="flex items-center gap-1.5 px-5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      {isCreatingRole ? (
+                        <>
+                          <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                          Creating Role...
+                        </>
+                      ) : (
+                        'Create Role'
+                      )}
+                    </button>
+                  </div>
                 </form>
               )}
             </div>
-
-            {!createSuccess && (
-              <div className="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-end gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setCreateRoleOpen(false)}
-                  className="px-4 py-2 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  form="create-role-form"
-                  disabled={isCreatingRole}
-                  className="flex items-center gap-1.5 px-5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs transition-all cursor-pointer disabled:opacity-50"
-                >
-                  {isCreatingRole ? (
-                    <>
-                      <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                      Minting Role...
-                    </>
-                  ) : (
-                    'Create Role'
-                  )}
-                </button>
-              </div>
-            )}
           </div>
         </div>
       )}
@@ -230,7 +234,7 @@ export default function AccessModals({
       {assignAccessOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="flex items-center justify-between p-6 border-b border-slate-100 bg-slate-50/50">
+            <div className="flex items-center justify-between p-5 border-b border-slate-100 bg-slate-50/50">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
                   <UserPlus className="w-5 h-5" />
@@ -241,6 +245,7 @@ export default function AccessModals({
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => setAssignAccessOpen(false)}
                 className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg transition-colors cursor-pointer"
               >
@@ -260,7 +265,7 @@ export default function AccessModals({
                   </p>
                 </div>
               ) : (
-                <form id="assign-access-form" onSubmit={handleAssignAccess} className="space-y-4">
+                <form onSubmit={handleAssignAccessSubmit} className="space-y-4">
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold text-slate-700">Identity Name or Email / DID</label>
                     <input
@@ -270,6 +275,7 @@ export default function AccessModals({
                       onChange={(e) => setUserName(e.target.value)}
                       placeholder="e.g. Ravi Kishore or did:bel:ab31...e5f7"
                       className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+                      autoFocus
                     />
                   </div>
 
@@ -280,7 +286,7 @@ export default function AccessModals({
                         required
                         value={selectedRole}
                         onChange={(e) => setSelectedRole(e.target.value)}
-                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                        className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
                       >
                         {roles.map(r => (
                           <option key={r.id} value={r.name}>{r.name} ({r.permissionsCount} perms)</option>
@@ -293,7 +299,7 @@ export default function AccessModals({
                       <select
                         value={department}
                         onChange={(e) => setDepartment(e.target.value)}
-                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                        className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
                       >
                         <option value="Defense R&D">Defense R&D</option>
                         <option value="IT & Cryptographic Security">IT & Cryptographic Security</option>
@@ -321,36 +327,34 @@ export default function AccessModals({
                       Assigning will emit a cryptographic role elevation event recorded on the immutable audit trail.
                     </p>
                   </div>
+
+                  {/* Submit buttons inside form */}
+                  <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setAssignAccessOpen(false)}
+                      className="px-4 py-2 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isAssigning || !userName.trim()}
+                      className="flex items-center gap-1.5 px-5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      {isAssigning ? (
+                        <>
+                          <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                          Authorizing...
+                        </>
+                      ) : (
+                        'Authorize & Assign'
+                      )}
+                    </button>
+                  </div>
                 </form>
               )}
             </div>
-
-            {!assignSuccess && (
-              <div className="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-end gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setAssignAccessOpen(false)}
-                  className="px-4 py-2 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  form="assign-access-form"
-                  disabled={isAssigning}
-                  className="flex items-center gap-1.5 px-5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs transition-all cursor-pointer disabled:opacity-50"
-                >
-                  {isAssigning ? (
-                    <>
-                      <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                      Authorizing...
-                    </>
-                  ) : (
-                    'Authorize & Assign'
-                  )}
-                </button>
-              </div>
-            )}
           </div>
         </div>
       )}

@@ -8,9 +8,23 @@ import AccessModals from '../components/AccessModals';
 import FullMatrixModal from '../components/FullMatrixModal';
 import { mockRoles, mockPermissionMatrix, type Role } from '../data/mockData';
 
+const ROLES_STORAGE_KEY = 'bel_access_roles';
+
 export default function AccessControl() {
-  // Primary Dynamic Roles & Matrix State
-  const [roles, setRoles] = useState<Role[]>(mockRoles);
+  // Primary Dynamic Roles with localStorage persistence
+  const [roles, setRoles] = useState<Role[]>(() => {
+    const saved = localStorage.getItem(ROLES_STORAGE_KEY);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {
+        console.error('Error loading roles from localStorage', e);
+      }
+    }
+    return mockRoles;
+  });
+
   const [createRoleOpen, setCreateRoleOpen] = useState(false);
   const [assignAccessOpen, setAssignAccessOpen] = useState(false);
   const [isFullMatrixOpen, setIsFullMatrixOpen] = useState(false);
@@ -44,17 +58,28 @@ export default function AccessControl() {
     setIsFilterOpen(false);
   };
 
-  // Real Dynamic Role Creation Handler
+  // Real Dynamic Role Creation Handler with persistence
   const handleRoleCreated = (newRole: Role, permissionsArray: boolean[]) => {
-    setRoles(prev => [newRole, ...prev]);
+    setRoles(prev => {
+      const updated = [newRole, ...prev];
+      localStorage.setItem(ROLES_STORAGE_KEY, JSON.stringify(updated));
+      return updated;
+    });
     mockPermissionMatrix[newRole.name] = permissionsArray;
   };
 
-  // Real Dynamic Access Assignment Handler
+  const handleRolesChange = (newRoles: Role[]) => {
+    setRoles(newRoles);
+    localStorage.setItem(ROLES_STORAGE_KEY, JSON.stringify(newRoles));
+  };
+
+  // Real Dynamic Access Assignment Handler with persistence
   const handleAssignAccess = (_userName: string, roleName: string, _resource: string, _department: string) => {
-    setRoles(prev =>
-      prev.map(r => (r.name === roleName ? { ...r, usersCount: r.usersCount + 1 } : r))
-    );
+    setRoles(prev => {
+      const updated = prev.map(r => (r.name === roleName ? { ...r, usersCount: r.usersCount + 1 } : r));
+      localStorage.setItem(ROLES_STORAGE_KEY, JSON.stringify(updated));
+      return updated;
+    });
   };
 
   const totalUsersCount = roles.reduce((sum, r) => sum + r.usersCount, 0);
@@ -232,7 +257,7 @@ export default function AccessControl() {
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           <RolesTable 
             roles={roles}
-            onRolesChange={setRoles}
+            onRolesChange={handleRolesChange}
             onViewAllRoles={() => setActiveTab('Roles')}
             searchTerm={searchTerm}
             statusFilter={statusFilter}
