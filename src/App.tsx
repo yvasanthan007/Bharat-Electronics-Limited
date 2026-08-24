@@ -3,6 +3,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import Dashboard from './pages/Dashboard';
+import Reports from './pages/Reports';
+import Settings from './pages/Settings';
 
 function App() {
   return (
@@ -15,7 +17,11 @@ function App() {
             <Routes>
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="*" element={<div className="flex items-center justify-center h-full text-slate-500">Coming Soon</div>} />
+              <Route path="/reports" element={<Reports />} />
+              <Route path="/dashboard/reports" element={<Reports />} />
+              <Route path="/settings" element={<Settings />} />
+              <Route path="/dashboard/settings" element={<Settings />} />
+              <Route path="*" element={<div className="flex items-center justify-center h-full text-slate-500 font-medium">Coming Soon</div>} />
             </Routes>
           </main>
         </div>
