@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { X, Download, FileSpreadsheet, FileCode, CheckCircle, ShieldCheck } from 'lucide-react';
 import type { AuditLogEvent } from '../../data/auditData';
+import { exportAuditLogs } from '../../services/auditService';
 
 interface ExportLogsModalProps {
   isOpen: boolean;
@@ -27,55 +28,7 @@ export default function ExportLogsModal({
     setIsExporting(true);
 
     setTimeout(() => {
-      const dataToExport = filteredEvents.map((evt) => ({
-        eventId: evt.id,
-        actorName: evt.actor.name,
-        actorRole: evt.actor.role,
-        actorAddress: evt.actor.address,
-        action: evt.action,
-        resource: evt.resource.name,
-        resourceId: evt.resource.id,
-        network: evt.network,
-        timestamp: evt.timestamp,
-        status: evt.status,
-        txHash: evt.txHash || 'N/A',
-        ...(includeIntegrityProof
-          ? {
-              blockNumber: evt.integrity.blockNumber,
-              prevEventHash: evt.integrity.prevEventHash,
-              currEventHash: evt.integrity.currEventHash,
-              integrityStatus: 'Verified'
-            }
-          : {})
-      }));
-
-      let blob: Blob;
-      let filename: string;
-
-      if (format === 'json') {
-        const jsonContent = JSON.stringify(dataToExport, null, 2);
-        blob = new Blob([jsonContent], { type: 'application/json' });
-        filename = `BEL_Audit_Trail_${new Date().toISOString().split('T')[0]}.json`;
-      } else {
-        // Convert to CSV
-        const headers = Object.keys(dataToExport[0] || {}).join(',');
-        const rows = dataToExport.map((row) =>
-          Object.values(row)
-            .map((val) => `"${String(val).replace(/"/g, '""')}"`)
-            .join(',')
-        );
-        const csvContent = [headers, ...rows].join('\n');
-        blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        filename = `BEL_Audit_Trail_${new Date().toISOString().split('T')[0]}.csv`;
-      }
-
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.setAttribute('href', url);
-      link.setAttribute('download', filename);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      exportAuditLogs(filteredEvents, format, includeIntegrityProof);
 
       setIsExporting(false);
       setExportComplete(true);
@@ -84,7 +37,7 @@ export default function ExportLogsModal({
         setExportComplete(false);
         onClose();
       }, 1500);
-    }, 600);
+    }, 400);
   };
 
   return (

@@ -1,0 +1,51 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check if user has Admin role in custom claims or user doc
+    function isAdmin() {
+      return isAuthenticated() && (request.auth.token.role == 'Admin' || request.auth.token.admin == true);
+    }
+
+    // AUDIT LOGS: Append-Only Immutable Ledger
+    // Reading is permitted for authorized platform members.
+    // Creating is permitted for system & platform events.
+    // Modifications and Deletions are strictly prohibited to ensure tamper resistance.
+    match /auditLogs/{logId} {
+      allow read: if true; // Or isAuthenticated() when Firebase Auth is enforced
+      allow create: if true; // Append-only
+      allow update: if false; // Immutable
+      allow delete: if false; // Tamper-proof
+    }
+
+    // SMART CONTRACTS:
+    // Read allowed for all platform users.
+    // Create/Update allowed for platform administrators.
+    // Hard deletes prohibited (use status = 'Deprecated').
+    match /smartContracts/{contractId} {
+      allow read: if true;
+      allow create: if true; // In production: if isAdmin()
+      allow update: if true; // In production: if isAdmin()
+      allow delete: if false; // Preserve audit trail
+      
+      match /functions/{funcId} {
+        allow read: if true;
+        allow write: if true; // In production: if isAdmin()
+      }
+    }
+
+    // CONTRACT ACTIVITIES:
+    // Append-only history of contract invocations.
+    match /contractActivities/{activityId} {
+      allow read: if true;
+      allow create: if true;
+      allow update: if false;
+      allow delete: if false;
+    }
+  }
+}
