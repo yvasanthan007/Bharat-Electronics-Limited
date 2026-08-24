@@ -101,3 +101,79 @@ export const mockData = {
     gasPrice: '20 Gwei'
   }
 };
+
+export type IdentityStatus = 'Verified' | 'Pending' | 'Revoked';
+
+export interface Identity {
+  id: string;
+  name: string;
+  did: string;
+  role: string;
+  department: string;
+  status: IdentityStatus;
+  createdOn: string;
+  lastActive: string;
+}
+
+export const mockIdentities: Identity[] = [
+  {
+    id: '1',
+    name: 'Rahul Verma',
+    did: 'did:bel:7f82...a3b9',
+    role: 'Administrator',
+    department: 'IT Security',
+    status: 'Verified',
+    createdOn: '2026-01-15',
+    lastActive: '2 min ago',
+  },
+  {
+    id: '2',
+    name: 'Neha Gupta',
+    did: 'did:bel:3c91...b7d2',
+    role: 'Manager',
+    department: 'Operations',
+    status: 'Verified',
+    createdOn: '2026-02-10',
+    lastActive: '1 hr ago',
+  },
+  {
+    id: '3',
+    name: 'Amit Kumar',
+    did: 'did:bel:9a11...c4f8',
+    role: 'Engineer',
+    department: 'R&D',
+    status: 'Verified',
+    createdOn: '2026-03-22',
+    lastActive: '3 hrs ago',
+  },
+  {
+    id: '4',
+    name: 'Priya Singh',
+    did: 'did:bel:6d44...e1a2',
+    role: 'Auditor',
+    department: 'Audit',
+    status: 'Verified',
+    createdOn: '2026-04-05',
+    lastActive: '1 day ago',
+  },
+  {
+    id: '5',
+    name: 'Ajay Sharma',
+    did: 'did:bel:f2b8...d9c1',
+    role: 'User',
+    department: 'Logistics',
+    status: 'Pending',
+    createdOn: '2026-08-20',
+    lastActive: 'Never',
+  },
+  {
+    id: '6',
+    name: 'Ravi Kishore',
+    did: 'did:bel:ab31...e5f7',
+    role: 'User',
+    department: 'HR',
+    status: 'Pending',
+    createdOn: '2026-08-23',
+    lastActive: 'Never',
+  },
+];
