@@ -1,35 +1,39 @@
 import { useState, useMemo } from 'react';
-import { 
-  RotateCw, 
-  ChevronLeft, 
-  ChevronRight, 
-  CheckCircle2, 
-  Rocket 
+import {
+  RotateCw,
+  ChevronLeft,
+  ChevronRight,
+  CheckCircle2,
+  Rocket,
 } from 'lucide-react';
 import StatCard from '../components/StatCard';
 import ContractFilterBar from '../components/contracts/ContractFilterBar';
 import ContractTable from '../components/contracts/ContractTable';
 import ContractDetailsDrawer from '../components/contracts/ContractDetailsDrawer';
 import DeployContractModal from '../components/contracts/DeployContractModal';
-import { 
-  contractStats, 
-  contractsMock, 
-  type SmartContractItem 
+
+import {
+  contractStats,
+  contractsMock,
+  type SmartContractItem,
 } from '../data/contractData';
 
 export default function SmartContracts() {
-  const [contracts, setContracts] = useState<SmartContractItem[]>(contractsMock);
-  
+  const [contracts, setContracts] =
+    useState<SmartContractItem[]>(contractsMock);
+
   // Filters State
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('All Statuses');
   const [selectedNetwork, setSelectedNetwork] = useState('All Networks');
-  const [selectedVerification, setSelectedVerification] = useState('All Verification');
+  const [selectedVerification, setSelectedVerification] =
+    useState('All Verification');
   const [selectedType, setSelectedType] = useState('All Types');
-  
+
   // View & Modals State
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
-  const [selectedContract, setSelectedContract] = useState<SmartContractItem | null>(null);
+  const [selectedContract, setSelectedContract] =
+    useState<SmartContractItem | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isDeployModalOpen, setIsDeployModalOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -38,13 +42,21 @@ export default function SmartContracts() {
 
   const activeFilterCount = useMemo(() => {
     let count = 0;
+
     if (searchQuery.trim()) count++;
     if (selectedStatus !== 'All Statuses') count++;
     if (selectedNetwork !== 'All Networks') count++;
     if (selectedVerification !== 'All Verification') count++;
     if (selectedType !== 'All Types') count++;
+
     return count;
-  }, [searchQuery, selectedStatus, selectedNetwork, selectedVerification, selectedType]);
+  }, [
+    searchQuery,
+    selectedStatus,
+    selectedNetwork,
+    selectedVerification,
+    selectedType,
+  ]);
 
   const handleClearFilters = () => {
     setSearchQuery('');
@@ -57,6 +69,7 @@ export default function SmartContracts() {
 
   const handleRefresh = () => {
     setIsRefreshing(true);
+
     setTimeout(() => {
       setIsRefreshing(false);
     }, 600);
@@ -71,9 +84,10 @@ export default function SmartContracts() {
   // Filter Logic
   const filteredContracts = useMemo(() => {
     return contracts.filter((item) => {
-      // Search match (Name, address, symbol, network, description)
+      // Search match
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
+
         const matchesName = item.name.toLowerCase().includes(q);
         const matchesAddress = item.address.toLowerCase().includes(q);
         const matchesSymbol = item.symbol.toLowerCase().includes(q);
@@ -81,23 +95,39 @@ export default function SmartContracts() {
         const matchesDesc = item.description.toLowerCase().includes(q);
         const matchesType = item.type.toLowerCase().includes(q);
 
-        if (!matchesName && !matchesAddress && !matchesSymbol && !matchesNetwork && !matchesDesc && !matchesType) {
+        if (
+          !matchesName &&
+          !matchesAddress &&
+          !matchesSymbol &&
+          !matchesNetwork &&
+          !matchesDesc &&
+          !matchesType
+        ) {
           return false;
         }
       }
 
       // Status
-      if (selectedStatus !== 'All Statuses' && item.status !== selectedStatus) {
+      if (
+        selectedStatus !== 'All Statuses' &&
+        item.status !== selectedStatus
+      ) {
         return false;
       }
 
       // Network
-      if (selectedNetwork !== 'All Networks' && item.network !== selectedNetwork) {
+      if (
+        selectedNetwork !== 'All Networks' &&
+        item.network !== selectedNetwork
+      ) {
         return false;
       }
 
       // Verification
-      if (selectedVerification !== 'All Verification' && item.verification.status !== selectedVerification) {
+      if (
+        selectedVerification !== 'All Verification' &&
+        item.verification.status !== selectedVerification
+      ) {
         return false;
       }
 
@@ -108,12 +138,24 @@ export default function SmartContracts() {
 
       return true;
     });
-  }, [contracts, searchQuery, selectedStatus, selectedNetwork, selectedVerification, selectedType]);
+  }, [
+    contracts,
+    searchQuery,
+    selectedStatus,
+    selectedNetwork,
+    selectedVerification,
+    selectedType,
+  ]);
 
-  // Paginated View
-  const totalPages = Math.max(1, Math.ceil(filteredContracts.length / pageSize));
+  // Pagination
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredContracts.length / pageSize)
+  );
+
   const paginatedContracts = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
+
     return filteredContracts.slice(start, start + pageSize);
   }, [filteredContracts, currentPage, pageSize]);
 
@@ -128,14 +170,19 @@ export default function SmartContracts() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Smart Contracts</h1>
+            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+              Smart Contracts
+            </h1>
+
             <span className="flex items-center gap-1 text-xs font-semibold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200">
               <CheckCircle2 className="w-3 h-3 text-blue-600" />
               EVM Compatible
             </span>
           </div>
+
           <p className="text-sm text-slate-500 mt-1">
-            Manage, monitor, and verify smart contracts powering the BEL Trust Platform.
+            Manage, monitor, and verify smart contracts powering the BEL Trust
+            Platform.
           </p>
         </div>
 
@@ -145,7 +192,11 @@ export default function SmartContracts() {
             className="p-2.5 bg-white hover:bg-slate-50 text-slate-600 hover:text-slate-900 border border-slate-200 rounded-lg transition-colors shadow-sm"
             title="Refresh Smart Contracts"
           >
-            <RotateCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-blue-600' : ''}`} />
+            <RotateCw
+              className={`w-4 h-4 ${
+                isRefreshing ? 'animate-spin text-blue-600' : ''
+              }`}
+            />
           </button>
 
           <button
@@ -158,7 +209,7 @@ export default function SmartContracts() {
         </div>
       </div>
 
-      {/* 4 Compact Stat Cards */}
+      {/* Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         {contractStats.map((stat, index) => (
           <StatCard key={index} {...stat} />
@@ -206,17 +257,35 @@ export default function SmartContracts() {
         viewMode={viewMode}
       />
 
-      {/* Pagination Bar */}
+      {/* Pagination */}
       <div className="bg-white px-5 py-3.5 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4 text-xs font-medium text-slate-600">
         <div className="flex items-center gap-3">
           <span>
-            Showing <strong className="font-semibold text-slate-900">{filteredContracts.length > 0 ? (currentPage - 1) * pageSize + 1 : 0}</strong>–
-            <strong className="font-semibold text-slate-900">{Math.min(currentPage * pageSize, filteredContracts.length)}</strong> of{' '}
-            <strong className="font-semibold text-slate-900">{filteredContracts.length < contracts.length ? `${filteredContracts.length} filtered (${contracts.length} total)` : `${contracts.length}`}</strong> contracts
+            Showing{' '}
+            <strong className="font-semibold text-slate-900">
+              {filteredContracts.length > 0
+                ? (currentPage - 1) * pageSize + 1
+                : 0}
+            </strong>
+            –
+            <strong className="font-semibold text-slate-900">
+              {Math.min(
+                currentPage * pageSize,
+                filteredContracts.length
+              )}
+            </strong>{' '}
+            of{' '}
+            <strong className="font-semibold text-slate-900">
+              {filteredContracts.length < contracts.length
+                ? `${filteredContracts.length} filtered (${contracts.length} total)`
+                : `${contracts.length}`}
+            </strong>{' '}
+            contracts
           </span>
 
           <div className="flex items-center gap-1.5 ml-2 border-l border-slate-200 pl-3">
             <span className="text-slate-400">Rows per page:</span>
+
             <select
               value={pageSize}
               onChange={(e) => {
@@ -235,7 +304,9 @@ export default function SmartContracts() {
         {/* Page Buttons */}
         <div className="flex items-center gap-1">
           <button
-            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+            onClick={() =>
+              setCurrentPage((p) => Math.max(1, p - 1))
+            }
             disabled={currentPage === 1}
             className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             title="Previous Page"
@@ -243,22 +314,26 @@ export default function SmartContracts() {
             <ChevronLeft className="w-4 h-4" />
           </button>
 
-          {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
-            <button
-              key={pageNum}
-              onClick={() => setCurrentPage(pageNum)}
-              className={`w-7 h-7 rounded-lg text-xs font-semibold transition-colors ${
-                currentPage === pageNum
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-              }`}
-            >
-              {pageNum}
-            </button>
-          ))}
+          {Array.from({ length: totalPages }, (_, i) => i + 1).map(
+            (pageNum) => (
+              <button
+                key={pageNum}
+                onClick={() => setCurrentPage(pageNum)}
+                className={`w-7 h-7 rounded-lg text-xs font-semibold transition-colors ${
+                  currentPage === pageNum
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                }`}
+              >
+                {pageNum}
+              </button>
+            )
+          )}
 
           <button
-            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+            onClick={() =>
+              setCurrentPage((p) => Math.min(totalPages, p + 1))
+            }
             disabled={currentPage === totalPages}
             className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             title="Next Page"

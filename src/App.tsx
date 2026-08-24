@@ -10,8 +10,8 @@ import DigitalAssets from './pages/DigitalAssets';
 import Transactions from './pages/Transactions';
 import Identities from './pages/Identities';
 import AccessControl from './pages/AccessControl';
-import AuditTrail from './pages/AuditTrail';
 import SmartContracts from './pages/SmartContracts';
+import AuditTrail from './pages/AuditTrail';
 
 const BelLayout = () => (
   <div className="flex h-screen bg-slate-50 overflow-hidden">
@@ -34,6 +34,7 @@ function App() {
 
         {/* Login */}
         <Route path="/" element={<Navigate to="/login" replace />} />
+
         <Route path="/login" element={<Login />} />
 
         {/* Main BEL Application */}
@@ -89,6 +90,16 @@ function App() {
         <Route
           path="/access-control"
           element={<Navigate to="/bel/access-control" replace />}
+        />
+
+        <Route
+          path="/smart-contracts"
+          element={<Navigate to="/bel/smart-contracts" replace />}
+        />
+
+        <Route
+          path="/audit-trail"
+          element={<Navigate to="/bel/audit-trail" replace />}
         />
 
         <Route
