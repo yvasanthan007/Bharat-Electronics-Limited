@@ -22,3 +22,21 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# ─── Environment Variables (NEVER commit) ───────────────────────────
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+.env.staging
+
+# Keep the example template safe to commit
+!.env.example
+
+# ─── Firebase sensitive files ────────────────────────────────────────
+*-service-account*.json
+firebase-adminsdk*.json
+serviceAccount*.json
+.firebase/
+firebase-debug.log
