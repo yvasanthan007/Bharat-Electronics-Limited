@@ -8,6 +8,7 @@ import ImportIdentitiesModal from '../components/ImportIdentitiesModal';
 import DidDocumentModal from '../components/DidDocumentModal';
 import { useWallet } from '../context/WalletContext';
 import { associateWalletWithDID } from '../services/wallet';
+
 import type { DIDIdentity } from '../data/mockDIDData';
 import type { GeneratedDID } from '../lib/did/didEngine';
 import { 
@@ -202,6 +203,20 @@ export default function Identities() {
             <Plus className="w-3.5 h-3.5" />
             Create Identity
           </button>
+
+          {/* Create DID */}
+          <button
+            type="button"
+            onClick={() =>
+              setIsCreateModalOpen(true)
+            }
+            className="flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
+          >
+            <Fingerprint className="w-4 h-4" />
+
+            Create DID
+          </button>
+
         </div>
       </div>
 

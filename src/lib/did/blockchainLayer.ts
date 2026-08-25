@@ -8,12 +8,16 @@ export interface BlockchainEvent {
   eventType:
     | 'DID_CREATED'
     | 'DID_VERIFIED'
+    | 'DID_DEACTIVATED'
+    | 'DID_VERIFICATION_SUCCESS'
+    | 'DID_VERIFICATION_FAILED'
     | 'VC_ISSUED'
     | 'VC_VERIFIED'
     | 'VC_REVOKED'
     | 'ACCESS_GRANTED'
     | 'ACCESS_DENIED'
-    | 'WALLET_CONNECTED';
+    | 'WALLET_CONNECTED'
+    | 'EMPLOYEE_LOGIN';
   actorDID: string;
   walletAddress: string;
   details: Record<string, string>;
@@ -112,12 +116,16 @@ export function formatEventType(eventType: BlockchainEvent['eventType']): string
   const labels: Record<BlockchainEvent['eventType'], string> = {
     DID_CREATED: 'DID Created',
     DID_VERIFIED: 'DID Verified',
+    DID_DEACTIVATED: 'DID Deactivated',
+    DID_VERIFICATION_SUCCESS: 'DID Verification Success',
+    DID_VERIFICATION_FAILED: 'DID Verification Failed',
     VC_ISSUED: 'Credential Issued',
     VC_VERIFIED: 'Credential Verified',
     VC_REVOKED: 'Credential Revoked',
     ACCESS_GRANTED: 'Access Granted',
     ACCESS_DENIED: 'Access Denied',
     WALLET_CONNECTED: 'Wallet Connected',
+    EMPLOYEE_LOGIN: 'Employee Login',
   };
   return labels[eventType] ?? eventType;
 }

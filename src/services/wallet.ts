@@ -74,12 +74,33 @@ export function hasBrowserWallet(): boolean {
 
 /* ------------------------------- demo fallback ------------------------------ */
 
-// In-memory demo wallet — never persisted, regenerated per tab session.
+/**
+ * Deterministic demo wallet derived from the well-known PUBLIC BIP-39 test
+ * mnemonic ("test test … junk" — Hardhat/Foundry's standard throwaway vector).
+ *
+ * It is deterministic so the pre-registered demo employee DID can be bound to
+ * a STABLE address and the challenge/response login stays reproducible across
+ * sessions. It holds no real funds and must never be used in production.
+ */
+export const DEMO_MNEMONIC =
+    'test test test test test test test test test test test junk';
+
+// In-memory demo wallet — derived once per tab session.
 let _demoWallet: ethers.HDNodeWallet | null = null;
 
 function getDemoWallet(): ethers.HDNodeWallet {
-    if (!_demoWallet) _demoWallet = ethers.Wallet.createRandom();
+    if (!_demoWallet) _demoWallet = ethers.HDNodeWallet.fromPhrase(DEMO_MNEMONIC);
     return _demoWallet;
+}
+
+/** Checksummed address of the deterministic demo wallet. */
+export function getDemoWalletAddress(): string {
+    return getDemoWallet().address;
+}
+
+/** Compressed public key of the deterministic demo wallet (for the DID document). */
+export function getDemoWalletPublicKey(): string {
+    return getDemoWallet().publicKey;
 }
 
 /* --------------------------------- connect ---------------------------------- */
@@ -92,7 +113,12 @@ function getDemoWallet(): ethers.HDNodeWallet {
  */
 export async function connectWallet(): Promise<WalletSession> {
     const existing = getSavedSession();
-    if (existing) return existing;
+    // Stale demo sessions from earlier runs (random wallet) are discarded so
+    // the deterministic demo employee address is always the one presented.
+    if (existing && (!existing.isDemo || existing.address === getDemoWallet().address)) {
+        return existing;
+    }
+    clearSession();
 
     if (hasBrowserWallet()) {
         try {
@@ -136,6 +162,45 @@ export async function connectWallet(): Promise<WalletSession> {
 /** Disconnects the app session (browser wallets cannot be force-disconnected). */
 export function disconnectWallet(): void {
     clearSession();
+}
+
+/**
+ * Signs a message with an EIP-1193 browser wallet (MetaMask etc.) for the
+ * given account. The user approves in the extension; the key never leaves it.
+ */
+export async function personalSign(address: string, message: string): Promise<string> {
+    if (!hasBrowserWallet()) {
+        throw new Error('No browser wallet available for signing.');
+    }
+    const messageHex = ethers.hexlify(ethers.toUtf8Bytes(message));
+    return (await window.ethereum!.request({
+        method: 'personal_sign',
+        params: [messageHex, address],
+    })) as string;
+}
+
+/**
+ * Returns the unlocked accounts of an injected browser wallet
+ * ([] when no provider is present or access has not been granted yet).
+ */
+export async function getBrowserWalletAccounts(): Promise<string[]> {
+    if (!hasBrowserWallet()) return [];
+    try {
+        const accounts = (await window.ethereum!.request({
+            method: 'eth_accounts',
+        })) as string[];
+        return accounts ?? [];
+    } catch {
+        return [];
+    }
+}
+
+/**
+ * Simulated Secure Key Storage (prototype): signs with the deterministic
+ * demo wallet held in memory. The private key never leaves this module.
+ */
+export async function signWithDemoWallet(message: string): Promise<string> {
+    return getDemoWallet().signingKey.sign(ethers.hashMessage(message)).serialized;
 }
 
 async function recordWalletConnectedEvent(session: WalletSession): Promise<void> {

@@ -9,7 +9,7 @@ export class TransactionsController {
       const { status, type, page = '1', limit = '10' } = req.query;
 
       const userWallets = await prisma.wallet.findMany({ where: { userId }, select: { id: true } });
-      const walletIds = userWallets.map(w => w.id);
+      const walletIds = userWallets.map((w: any) => w.id);
 
       const filters: any = { walletId: { in: walletIds } };
       if (status) filters.status = status;

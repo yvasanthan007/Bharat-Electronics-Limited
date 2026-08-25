@@ -20,6 +20,11 @@ model User {
   auditLogs     AuditLog[]
   refreshTokens RefreshToken[]
   sessions      Session[]
+  did           String?        @unique
+  didPublicKey  String?        @map("did_public_key")
+  didStatus     String?        @default("ACTIVE") @map("did_status")
+  didCreatedAt  DateTime?      @map("did_created_at")
+  didCreatedBy  String?        @map("did_created_by")
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 }

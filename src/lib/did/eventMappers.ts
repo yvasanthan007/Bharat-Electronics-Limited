@@ -36,9 +36,14 @@ function resolveActor(did: string): { name: string; role: string } {
 function resourceInfo(evt: BlockchainEvent): { name: string; type: string; id: string } {
     switch (evt.eventType) {
         case 'DID_CREATED':
-            return { name: evt.details.name ?? 'New DID', type: 'Identity', id: evt.actorDID };
+            return { name: evt.details.targetUser ? `${evt.details.targetUser} (${evt.details.targetDID})` : (evt.details.name ?? 'New DID'), type: 'Identity', id: evt.details.targetDID ?? evt.actorDID };
         case 'DID_VERIFIED':
-            return { name: 'DID Verification', type: 'Identity', id: evt.details.did ?? evt.actorDID };
+        case 'DID_VERIFICATION_SUCCESS':
+            return { name: evt.details.user ? `DID Verified · ${evt.details.user}` : 'DID Verification', type: 'Identity', id: evt.details.did ?? evt.actorDID };
+        case 'DID_DEACTIVATED':
+            return { name: `DID Deactivated · ${evt.details.targetUser ?? evt.details.targetDID}`, type: 'Identity', id: evt.details.targetDID ?? evt.actorDID };
+        case 'DID_VERIFICATION_FAILED':
+            return { name: `DID Verification Failed · ${evt.details.targetUser ?? evt.details.reason}`, type: 'Security Alert', id: evt.actorDID };
         case 'VC_ISSUED':
             return { name: evt.details.credentialType ?? 'Credential', type: 'Credential', id: evt.details.vcId ?? 'vc' };
         case 'VC_VERIFIED':
@@ -107,13 +112,17 @@ export function getDIDAuditEvents(): AuditLogEvent[] {
 const TX_TYPE_MAP: Record<BlockchainEvent['eventType'], Transaction['type']> = {
     DID_CREATED: 'Mint',
     DID_VERIFIED: 'Contract Call',
+    DID_DEACTIVATED: 'Burn',
+    DID_VERIFICATION_SUCCESS: 'Contract Call',
+    DID_VERIFICATION_FAILED: 'Contract Call',
     VC_ISSUED: 'Mint',
     VC_VERIFIED: 'Contract Call',
     VC_REVOKED: 'Burn',
     ACCESS_GRANTED: 'Contract Call',
     ACCESS_DENIED: 'Contract Call',
     WALLET_CONNECTED: 'Contract Call',
-};
+    EMPLOYEE_LOGIN: 'Contract Call',
+  };
 
 const ASSET_MAP: Record<string, string> = {
     Identity: 'DID',

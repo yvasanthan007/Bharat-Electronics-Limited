@@ -32,7 +32,7 @@ export class TransactionService {
 
   async findMany(query: z.infer<typeof transactionQuerySchema>) {
     const { page, limit, startDate, endDate, walletId, assetSymbol, status, network, transactionType, minAmount, maxAmount, search, sortBy, sortOrder } = query;
-    
+
     const skip = (page - 1) * limit;
     const where: Prisma.TransactionWhereInput = {};
 
@@ -67,7 +67,7 @@ export class TransactionService {
     const orderBy: Prisma.TransactionOrderByWithRelationInput = { [sortBy]: sortOrder };
 
     const { data, totalCount } = await this.repository.findMany({ skip, take: limit, where, orderBy });
-    
+
     return {
       data,
       page,
@@ -91,9 +91,9 @@ export class TransactionService {
 
     const { aggregations, statusGroup, typeGroup, networkGroup, assetGroup } = await this.repository.getAnalytics(where);
 
-    const successfulTransactions = statusGroup.find(s => s.status === 'Confirmed')?._count || 0;
-    const pendingTransactions = statusGroup.find(s => s.status === 'Pending')?._count || 0;
-    const failedTransactions = statusGroup.find(s => s.status === 'Failed')?._count || 0;
+    const successfulTransactions = statusGroup.find((s: any) => s.status === 'Confirmed')?._count || 0;
+    const pendingTransactions = statusGroup.find((s: any) => s.status === 'Pending')?._count || 0;
+    const failedTransactions = statusGroup.find((s: any) => s.status === 'Failed')?._count || 0;
 
     return {
       totalTransactions: aggregations._count._all,
@@ -105,9 +105,9 @@ export class TransactionService {
       totalFeesPaid: aggregations._sum.transactionFee || 0,
       averageTransactionSize: aggregations._avg.amount || 0,
       averageUsdSize: aggregations._avg.usdValue || 0,
-      mostUsedAssets: assetGroup.map(a => ({ assetSymbol: a.assetSymbol, count: a._count })),
-      networkUsage: networkGroup.map(n => ({ network: n.network, count: n._count })),
-      transactionTypesDistribution: typeGroup.map(t => ({ transactionType: t.transactionType, count: t._count })),
+      mostUsedAssets: assetGroup.map((a: any) => ({ assetSymbol: a.assetSymbol, count: a._count })),
+      networkUsage: networkGroup.map((n: any) => ({ network: n.network, count: n._count })),
+      transactionTypesDistribution: typeGroup.map((t: any) => ({ transactionType: t.transactionType, count: t._count })),
     };
   }
 
@@ -115,13 +115,13 @@ export class TransactionService {
     // Generate full list without pagination for export
     const fullQuery = { ...query, page: 1, limit: 1000000 };
     const { data } = await this.findMany(fullQuery);
-    
+
     if (query.format === 'csv') {
       const header = ['id', 'transactionHash', 'transactionType', 'assetSymbol', 'amount', 'usdValue', 'status', 'network', 'timestamp'].join(',');
-      const rows = data.map(tx => [tx.id, tx.transactionHash, tx.transactionType, tx.assetSymbol, tx.amount, tx.usdValue, tx.status, tx.network, tx.timestamp.toISOString()].join(','));
+      const rows = data.map((tx: any) => [tx.id, tx.transactionHash, tx.transactionType, tx.assetSymbol, tx.amount, tx.usdValue, tx.status, tx.network, tx.timestamp.toISOString()].join(','));
       return [header, ...rows].join('\n');
     }
-    
+
     return data;
   }
 }

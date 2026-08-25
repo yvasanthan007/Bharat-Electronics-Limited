@@ -26,9 +26,9 @@ export class AssetsController {
   async getPortfolio(req: Request, res: Response, next: NextFunction) {
     try {
       const userId = (req as any).user?.userId;
-      
+
       const wallets = await prisma.wallet.findMany({ where: { userId } });
-      const walletIds = wallets.map(w => w.id);
+      const walletIds = wallets.map((w: any) => w.id);
 
       const portfolios = await prisma.portfolio.findMany({
         where: { walletId: { in: walletIds } },
