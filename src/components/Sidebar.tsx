@@ -14,15 +14,15 @@ import {
 } from 'lucide-react';
 
 const navItems = [
-  { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-  { name: 'Identities', path: '/identities', icon: Users },
-  { name: 'Access Control', path: '/access-control', icon: ShieldCheck },
-  { name: 'Digital Assets', path: '/digital-assets', icon: Database },
-  { name: 'Transactions', path: '/transactions', icon: Activity },
-  { name: 'Audit Trail', path: '/audit-trail', icon: FileText },
-  { name: 'Smart Contracts', path: '/smart-contracts', icon: Code2 },
-  { name: 'Reports', path: '/reports', icon: BarChart3 },
-  { name: 'Settings', path: '/settings', icon: Settings },
+  { name: 'Dashboard', path: '/bel', icon: LayoutDashboard },
+  { name: 'Identities', path: '/bel/identities', icon: Users },
+  { name: 'Access Control', path: '/bel/access-control', icon: ShieldCheck },
+  { name: 'Digital Assets', path: '/bel/digital-assets', icon: Database },
+  { name: 'Transactions', path: '/bel/transactions', icon: Activity },
+  { name: 'Audit Trail', path: '/bel/audit-trail', icon: FileText },
+  { name: 'Smart Contracts', path: '/bel/smart-contracts', icon: Code2 },
+  { name: 'Reports', path: '/bel/reports', icon: BarChart3 },
+  { name: 'Settings', path: '/bel/settings', icon: Settings },
 ];
 
 export default function Sidebar() {

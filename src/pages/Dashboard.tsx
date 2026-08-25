@@ -5,6 +5,7 @@ import TransactionsChart from '../components/TransactionsChart';
 import RoleChart from '../components/RoleChart';
 import QuickActions from '../components/QuickActions';
 import BlockchainStatus from '../components/BlockchainStatus';
+import DIDActivityFeed from '../components/dashboard/DIDActivityFeed';
 import { mockData } from '../data/mockData';
 import { ShieldCheck } from 'lucide-react';
 
@@ -15,7 +16,7 @@ export default function Dashboard() {
       <div className="bg-blue-50/50 rounded-2xl p-8 border border-blue-100 flex items-center justify-between relative overflow-hidden">
         <div className="absolute inset-0 opacity-30 pointer-events-none" style={{ backgroundImage: 'linear-gradient(45deg, transparent 45%, #bfdbfe 45%, #bfdbfe 55%, transparent 55%)', backgroundSize: '20px 20px' }}></div>
         <div className="relative z-10 max-w-2xl">
-          <h2 className="text-3xl font-bold text-slate-900 mb-2">Welcome back, Rahul! 👋</h2>
+          <h2 className="text-3xl font-bold text-slate-900 mb-2">Welcome back, Rithvik! 👋</h2>
           <p className="text-lg font-medium text-blue-800 mb-2">You are logged in as Administrator</p>
           <p className="text-slate-600">Manage identities, control access, issue digital assets and view tamper-proof audit trails on the blockchain.</p>
         </div>
@@ -49,6 +50,9 @@ export default function Dashboard() {
           <ActivityList activities={mockData.activities} />
         </div>
       </div>
+
+      {/* Live DID / Credential / Access blockchain activity */}
+      <DIDActivityFeed />
 
       {/* Blockchain Status */}
       <BlockchainStatus data={mockData.blockchainStatus} />
