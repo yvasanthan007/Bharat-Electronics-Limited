@@ -1,6 +1,8 @@
-import { useState, type FormEvent } from 'react';
+import { useState, type FormEvent, useEffect } from 'react';
 import { Wallet, ShieldCheck, Lock, CheckCircle2, ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
+import { useAuthContext } from '../contexts/AuthContext';
 
 const AuthCard = () => {
   const [employeeId, setEmployeeId] = useState('');
@@ -10,20 +12,37 @@ const AuthCard = () => {
   const [isWalletLoading, setIsWalletLoading] = useState(false);
   const navigate = useNavigate();
 
-  const handleLogin = (e: FormEvent) => {
+  const { user, role, signIn } = useAuthContext();
+
+  // If already logged in, redirect based on role
+  useEffect(() => {
+    if (user && role) {
+      if (role === 'Manager') {
+        navigate('/manager');
+      } else {
+        navigate('/bel');
+      }
+    }
+  }, [user, role, navigate]);
+
+  const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
 
-    // Mock authentication
-    setTimeout(() => {
-      setIsLoading(false);
-      if (employeeId === 'BEL001' && password === 'bel123') {
-        navigate('/bel');
+    try {
+      if (employeeId === 'belmanager@gmail.com' && password === 'manager123') {
+        // Mock successful login
+        await signIn(employeeId);
       } else {
-        setError('Invalid Employee ID or password');
+        throw new Error('Invalid email or password');
       }
-    }, 800);
+    } catch (err: any) {
+      setError(err.message || 'Invalid email or password');
+      setPassword('');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleWalletConnect = () => {
