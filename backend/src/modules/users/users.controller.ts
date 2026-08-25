@@ -13,9 +13,18 @@ export class UsersController {
       const user = await prisma.user.findUnique({
         where: { id: userId },
         select: {
-          id: true, email: true, firstName: true, lastName: true, isActive: true,
-          role: { select: { name: true } }
-        }
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          isActive: true,
+          did: true,
+          didPublicKey: true,
+          didStatus: true,
+          didCreatedAt: true,
+          didCreatedBy: true,
+          role: { select: { name: true } },
+        },
       });
 
       if (!user) return res.status(404).json(errorResponse('User not found'));
@@ -46,9 +55,19 @@ export class UsersController {
     try {
       const users = await prisma.user.findMany({
         select: {
-          id: true, email: true, firstName: true, lastName: true, isActive: true,
-          role: { select: { name: true } }, createdAt: true
-        }
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          isActive: true,
+          did: true,
+          didPublicKey: true,
+          didStatus: true,
+          didCreatedAt: true,
+          didCreatedBy: true,
+          role: { select: { name: true } },
+          createdAt: true,
+        },
       });
       res.json(successResponse(users));
     } catch (error) {

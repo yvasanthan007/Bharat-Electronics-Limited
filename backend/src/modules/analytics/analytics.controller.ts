@@ -15,7 +15,7 @@ export class AnalyticsController {
   async getAssetAllocation(req: Request, res: Response, next: NextFunction) {
     try {
       const assets = await prisma.asset.findMany({ take: 5 });
-      const allocation = assets.map(a => ({ name: a.name, symbol: a.symbol, value: a.price * 100 }));
+      const allocation = assets.map((a: any) => ({ name: a.name, symbol: a.symbol, value: a.price * 100 }));
       res.json(successResponse(allocation));
     } catch (error) { next(error); }
   }

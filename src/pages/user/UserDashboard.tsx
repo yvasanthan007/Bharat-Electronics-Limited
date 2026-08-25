@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   User, Package, ShieldCheck, Clock,
   ArrowUpRight, CheckCircle2, AlertCircle,
-  KeyRound, ChevronRight, Calendar,
+  KeyRound, ChevronRight, Calendar, Fingerprint,
 } from 'lucide-react';
 import {
   getDashboardKPI, getRecentActivities,
@@ -30,7 +30,9 @@ const activityIcons: Record<string, React.ElementType> = {
 
 export default function UserDashboard() {
   const navigate = useNavigate();
-  const [userName, setUserName] = useState('Rithvik');
+  const [userName, setUserName] = useState('Arun');
+  const [userRole, setUserRole] = useState('USER');
+  const [userDID, setUserDID] = useState('did:trustchain:ABC123');
   const [kpi, setKpi] = useState<DashboardKPI | null>(null);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,7 +46,9 @@ export default function UserDashboard() {
     if (userStr) {
       try {
         const user = JSON.parse(userStr);
-        setUserName(user.firstName || 'Rithvik');
+        setUserName(user.firstName || user.name || 'Arun');
+        setUserRole(typeof user.role === 'string' ? user.role : user.role?.name || 'USER');
+        if (user.did) setUserDID(user.did);
       } catch { /* fallback */ }
     }
 
@@ -97,6 +101,41 @@ export default function UserDashboard() {
             {dateStr}
           </div>
           <p className="text-slate-500 text-xs">{timeStr}</p>
+        </div>
+      </div>
+
+      {/* ================= MY DIGITAL IDENTITY (REQUIREMENT 11) ================= */}
+      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-2xl p-5 sm:p-6 text-white border border-slate-800 shadow-lg relative overflow-hidden">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
+          <div className="flex items-start gap-3.5">
+            <div className="w-12 h-12 rounded-xl bg-blue-600/30 border border-blue-400/30 flex items-center justify-center text-blue-400 shrink-0">
+              <Fingerprint className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-white">My Digital Identity</h3>
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Active
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 mt-1 font-mono break-all">
+                DID: <span className="text-blue-300 font-bold">{userDID}</span>
+              </p>
+              <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-slate-400">
+                <span>Role: <strong className="text-white font-medium">{userRole}</strong></span>
+                <span>•</span>
+                <span>Verification: <strong className="text-emerald-400 font-medium">On-Chain Verified</strong></span>
+                <span>•</span>
+                <span className="text-[11px] text-slate-400">Private key is controlled in your secure wallet</span>
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={() => navigate('/user/identity')}
+            className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-semibold backdrop-blur-sm border border-white/20 transition-colors shrink-0"
+          >
+            View Full Identity
+          </button>
         </div>
       </div>
 

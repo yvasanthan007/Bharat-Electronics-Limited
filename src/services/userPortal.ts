@@ -98,8 +98,31 @@ const MOCK_CREDENTIALS: Credential[] = [
   { name: 'Project Atlas Access',    id: 'NFT-1132', date: '01 Mar 2024', status: 'Pending' },
 ];
 
-export const getUserIdentity = (): Promise<UserIdentity> =>
-  apiGet('/users/me/identity', MOCK_IDENTITY);
+export const getUserIdentity = async (): Promise<UserIdentity> => {
+  const localUserStr = localStorage.getItem('user');
+  let dynamicIdentity = MOCK_IDENTITY;
+
+  if (localUserStr) {
+    try {
+      const u = JSON.parse(localUserStr);
+      const name = `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.name || 'Arun Kumar';
+      const role = typeof u.role === 'string' ? u.role : u.role?.name || 'USER';
+      const did = u.did || 'did:trustchain:ABC123';
+      dynamicIdentity = {
+        name,
+        role,
+        department: 'Engineering Systems',
+        employeeId: u.id ? `BEL-${u.id}` : 'BEL-101',
+        did,
+        status: 'Verified',
+        issuedOn: '10 Feb 2024',
+        validUntil: '09 Feb 2026',
+      };
+    } catch {}
+  }
+
+  return apiGet('/users/me/identity', dynamicIdentity);
+};
 
 export const getUserCredentials = (): Promise<Credential[]> =>
   apiGet('/users/me/credentials', MOCK_CREDENTIALS);

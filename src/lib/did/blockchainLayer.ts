@@ -8,6 +8,9 @@ export interface BlockchainEvent {
   eventType:
     | 'DID_CREATED'
     | 'DID_VERIFIED'
+    | 'DID_DEACTIVATED'
+    | 'DID_VERIFICATION_SUCCESS'
+    | 'DID_VERIFICATION_FAILED'
     | 'VC_ISSUED'
     | 'VC_VERIFIED'
     | 'VC_REVOKED'
@@ -113,6 +116,9 @@ export function formatEventType(eventType: BlockchainEvent['eventType']): string
   const labels: Record<BlockchainEvent['eventType'], string> = {
     DID_CREATED: 'DID Created',
     DID_VERIFIED: 'DID Verified',
+    DID_DEACTIVATED: 'DID Deactivated',
+    DID_VERIFICATION_SUCCESS: 'DID Verification Success',
+    DID_VERIFICATION_FAILED: 'DID Verification Failed',
     VC_ISSUED: 'Credential Issued',
     VC_VERIFIED: 'Credential Verified',
     VC_REVOKED: 'Credential Revoked',

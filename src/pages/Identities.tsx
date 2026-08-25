@@ -21,6 +21,7 @@ import UsersTable from '../components/identities/UsersTable';
 import IdentityStats from '../components/IdentityStats';
 import IdentityTable from '../components/IdentityTable';
 import CreateDIDModal from '../components/did/CreateDIDModal';
+import AddUserModal from '../components/identities/AddUserModal';
 
 import { useWallet } from '../context/WalletContext';
 import { associateWalletWithDID } from '../services/wallet';
@@ -42,6 +43,8 @@ export default function Identities() {
   // ================= DID MANAGEMENT =================
 
   const [isCreateModalOpen, setIsCreateModalOpen] =
+    useState(false);
+  const [isAddUserModalOpen, setIsAddUserModalOpen] =
     useState(false);
 
   const [refreshKey, setRefreshKey] = useState(0);
@@ -183,7 +186,8 @@ export default function Identities() {
           {/* Add user */}
           <button
             type="button"
-            className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors text-sm"
+            onClick={() => setIsAddUserModalOpen(true)}
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors text-sm shadow-sm"
           >
             <UserPlus className="w-4 h-4" />
 
@@ -271,6 +275,10 @@ export default function Identities() {
         <UsersTable
           users={users}
           search={search}
+          onRefresh={() => {
+            fetchData(true);
+            setRefreshKey((k) => k + 1);
+          }}
         />
 
         {/* Footer */}
@@ -296,6 +304,15 @@ export default function Identities() {
         onDIDCreated={handleDIDCreated}
       />
 
+      {/* ================= ADD USER MODAL ================= */}
+      <AddUserModal
+        isOpen={isAddUserModalOpen}
+        onClose={() => setIsAddUserModalOpen(false)}
+        onUserAdded={() => {
+          fetchData(true);
+          setRefreshKey((k) => k + 1);
+        }}
+      />
     </div>
   );
 }
