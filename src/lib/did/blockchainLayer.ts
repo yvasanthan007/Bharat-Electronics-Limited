@@ -13,7 +13,8 @@ export interface BlockchainEvent {
     | 'VC_REVOKED'
     | 'ACCESS_GRANTED'
     | 'ACCESS_DENIED'
-    | 'WALLET_CONNECTED';
+    | 'WALLET_CONNECTED'
+    | 'EMPLOYEE_LOGIN';
   actorDID: string;
   walletAddress: string;
   details: Record<string, string>;
@@ -118,6 +119,7 @@ export function formatEventType(eventType: BlockchainEvent['eventType']): string
     ACCESS_GRANTED: 'Access Granted',
     ACCESS_DENIED: 'Access Denied',
     WALLET_CONNECTED: 'Wallet Connected',
+    EMPLOYEE_LOGIN: 'Employee Login',
   };
   return labels[eventType] ?? eventType;
 }
