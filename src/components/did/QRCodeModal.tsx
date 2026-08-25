@@ -26,7 +26,7 @@ export default function QRCodeModal({ isOpen, onClose, identity }: QRCodeModalPr
         color: { dark: '#1e293b', light: '#ffffff' },
         errorCorrectionLevel: 'H',
       },
-      (err) => {
+      (err: any) => {
         if (!err) setIsReady(true);
       }
     );

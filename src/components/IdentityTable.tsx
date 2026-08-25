@@ -1,11 +1,10 @@
-import { useState } from 'react';
-import {
-  Search, Filter, LayoutGrid, List, MoreVertical,
-  Copy, Shield, ShieldAlert, ShieldCheck,
-  FileText, QrCode, Award, Eye, CheckCircle2
+import { useState, useMemo } from 'react';
+import { 
+  Search, LayoutGrid, List, MoreVertical, Copy, Check, 
+  ShieldCheck, ShieldAlert, ShieldX, UserX, UserCheck, Eye, 
+  Trash2, Award, Users, Shield, QrCode, FileText 
 } from 'lucide-react';
-import { getAllDIDIdentities } from '../services/did';
-import type { DIDIdentity } from '../data/mockDIDData';
+import type { Identity, IdentityStatus, SecurityClearance } from '../services/identities';
 import DIDDocumentModal from './did/DIDDocumentModal';
 import VerifyDIDModal from './did/VerifyDIDModal';
 import QRCodeModal from './did/QRCodeModal';
@@ -14,127 +13,291 @@ import VerifyCredentialModal from './credentials/VerifyCredentialModal';
 import CredentialCard from './credentials/CredentialCard';
 import { getCredentialsByHolder } from '../services/credentials';
 import type { VerifiableCredential } from '../lib/did/vcEngine';
+import type { DIDIdentity } from '../data/mockDIDData';
 
 interface IdentityTableProps {
-  identities?: DIDIdentity[];
+  identities: Identity[];
+  onToggleStatus?: (id: string) => void;
+  onDeleteIdentity?: (id: string) => void;
+  onInspectIdentity?: (identity: Identity) => void;
   onRefresh?: () => void;
 }
 
 type ActiveModal = 'doc' | 'verify' | 'qr' | 'issue' | 'credentials' | null;
 
-export default function IdentityTable({ identities: propIdentities, onRefresh }: IdentityTableProps) {
-  const [activeTab, setActiveTab] = useState('All Identities');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedIdentity, setSelectedIdentity] = useState<DIDIdentity | null>(null);
+export default function IdentityTable({
+  identities = [],
+  onToggleStatus,
+  onDeleteIdentity,
+  onInspectIdentity,
+  onRefresh,
+}: IdentityTableProps) {
+  const [activeTab, setActiveTab] = useState<'All Identities' | IdentityStatus>('All Identities');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [departmentFilter, setDepartmentFilter] = useState<string>('All');
+  const [clearanceFilter, setClearanceFilter] = useState<string>('All');
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const [copiedDid, setCopiedDid] = useState<string | null>(null);
+  const [selectedActionId, setSelectedActionId] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+
+  // Modals state
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [selectedIdentityForModal, setSelectedIdentityForModal] = useState<DIDIdentity | null>(null);
   const [credentialsForView, setCredentialsForView] = useState<VerifiableCredential[]>([]);
   const [vcToVerify, setVcToVerify] = useState<VerifiableCredential | null>(null);
   const [verifyVCOpen, setVerifyVCOpen] = useState(false);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  const tabs = ['All Identities', 'Verified', 'Pending', 'Revoked'];
+  const tabs: Array<'All Identities' | IdentityStatus> = ['All Identities', 'Verified', 'Pending', 'Revoked'];
 
-  const allIdentities = propIdentities ?? getAllDIDIdentities();
+  const departments = useMemo(() => {
+    const set = new Set(identities.map((i) => i.department).filter(Boolean));
+    return ['All', ...Array.from(set)];
+  }, [identities]);
 
-  const filteredIdentities = allIdentities.filter(identity => {
-    const matchesTab = activeTab === 'All Identities' || identity.status === activeTab;
-    const matchesSearch = !searchQuery ||
-      identity.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      identity.did.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      identity.role.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesTab && matchesSearch;
-  });
+  const filteredIdentities = useMemo(() => {
+    return identities.filter((identity) => {
+      const matchesTab = activeTab === 'All Identities' || identity.status === activeTab;
+      const matchesSearch =
+        !searchTerm ||
+        identity.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        identity.did?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        identity.employeeId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        identity.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        identity.role?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        identity.department?.toLowerCase().includes(searchTerm.toLowerCase());
 
-  const getStatusBadge = (status: string) => {
+      const matchesDept = departmentFilter === 'All' || identity.department === departmentFilter;
+      const matchesClearance = clearanceFilter === 'All' || identity.securityClearance === clearanceFilter;
+
+      return matchesTab && matchesSearch && matchesDept && matchesClearance;
+    });
+  }, [identities, activeTab, searchTerm, departmentFilter, clearanceFilter]);
+
+  // Pagination slice
+  const paginatedIdentities = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return filteredIdentities.slice(start, start + itemsPerPage);
+  }, [filteredIdentities, currentPage, itemsPerPage]);
+
+  const totalPages = Math.ceil(filteredIdentities.length / itemsPerPage) || 1;
+
+  const copyToClipboard = (text: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    navigator.clipboard.writeText(text);
+    setCopiedDid(text);
+    setTimeout(() => setCopiedDid(null), 2000);
+  };
+
+  const getStatusBadge = (status: IdentityStatus) => {
     switch (status) {
-      case 'Verified': return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-200">
-          <ShieldCheck className="w-3.5 h-3.5" />Verified
-        </span>
-      );
-      case 'Pending': return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
-          <ShieldAlert className="w-3.5 h-3.5" />Pending
-        </span>
-      );
-      case 'Revoked': return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-50 text-red-700 border border-red-200">
-          <Shield className="w-3.5 h-3.5" />Revoked
-        </span>
-      );
-      default: return null;
+      case 'Verified':
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+            Verified
+          </span>
+        );
+      case 'Pending':
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+            <ShieldAlert className="w-3.5 h-3.5 text-amber-600" />
+            Pending
+          </span>
+        );
+      case 'Revoked':
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+            <ShieldX className="w-3.5 h-3.5 text-rose-600" />
+            Revoked
+          </span>
+        );
+      default:
+        return null;
     }
   };
 
-  const copyToClipboard = (text: string, id: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 1500);
+  const getClearanceBadge = (clearance?: SecurityClearance) => {
+    switch (clearance) {
+      case 'Top Secret (SCI)':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-purple-50 text-purple-700 border border-purple-200">
+            <Shield className="w-3 h-3 text-purple-600" /> Top Secret
+          </span>
+        );
+      case 'Secret':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+            Secret
+          </span>
+        );
+      case 'Confidential':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+            Confidential
+          </span>
+        );
+      case 'Restricted':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+            Restricted
+          </span>
+        );
+      default:
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+            Standard
+          </span>
+        );
+    }
   };
 
-  const openModal = (identity: DIDIdentity, modal: ActiveModal) => {
-    setSelectedIdentity(identity);
-    setOpenMenuId(null);
+  const getRoleBadge = (role?: string) => {
+    switch (role) {
+      case 'Administrator':
+        return 'bg-red-50 text-red-700 border-red-200';
+      case 'Manager':
+        return 'bg-indigo-50 text-indigo-700 border-indigo-200';
+      case 'Engineer':
+        return 'bg-blue-50 text-blue-700 border-blue-200';
+      case 'Auditor':
+        return 'bg-amber-50 text-amber-700 border-amber-200';
+      case 'Security Officer':
+        return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+      default:
+        return 'bg-slate-100 text-slate-700 border-slate-200';
+    }
+  };
+
+  const toDIDIdentity = (identity: Identity): DIDIdentity => {
+    return {
+      id: identity.id,
+      name: identity.name,
+      did: identity.did,
+      fullDID: identity.did.startsWith('did:ethr:') || identity.did.startsWith('did:bel:') ? identity.did : `did:bel:${identity.did}`,
+      walletAddress: identity.walletAddress || '0x0000000000000000000000000000000000000000',
+      publicKey: identity.publicKey || '0x040000000000000000000000000000000000000000',
+      role: identity.role,
+      department: identity.department,
+      status: identity.status,
+      createdOn: identity.createdOn,
+      createdAt: identity.createdOn ? `${identity.createdOn}T00:00:00.000Z` : new Date().toISOString(),
+      lastActive: identity.lastActive,
+    };
+  };
+
+  const openDIDModal = (identity: Identity, modal: ActiveModal) => {
+    const didIdentity = toDIDIdentity(identity);
+    setSelectedIdentityForModal(didIdentity);
+    setSelectedActionId(null);
 
     if (modal === 'credentials') {
-      const creds = getCredentialsByHolder(identity.fullDID);
+      const creds = getCredentialsByHolder(didIdentity.fullDID);
       setCredentialsForView(creds);
     }
     setActiveModal(modal);
   };
 
   const handleIssued = (_vc: VerifiableCredential) => {
-    // Refresh credentials view
-    if (selectedIdentity) {
-      const creds = getCredentialsByHolder(selectedIdentity.fullDID);
+    if (selectedIdentityForModal) {
+      const creds = getCredentialsByHolder(selectedIdentityForModal.fullDID);
       setCredentialsForView(creds);
     }
     onRefresh?.();
   };
 
-  const truncate = (s: string, n = 14) =>
-    s.length > n ? `${s.slice(0, n)}...${s.slice(-4)}` : s;
-
   return (
     <>
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        {/* Controls & Tabs */}
-        <div className="p-4 border-b border-slate-200">
-          <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-4">
-            <div className="flex bg-slate-100 p-1 rounded-lg w-full sm:w-auto overflow-x-auto">
-              {tabs.map(tab => (
+      <div className="bg-white rounded-2xl shadow-2xs border border-slate-200 overflow-hidden">
+        {/* Table Controls & Filter Bar */}
+        <div className="p-4 sm:p-5 border-b border-slate-100 space-y-3">
+          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3">
+            {/* Status Tabs */}
+            <div className="flex bg-slate-100 p-1 rounded-xl w-full sm:w-auto overflow-x-auto gap-0.5">
+              {tabs.map((tab) => (
                 <button
                   key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all whitespace-nowrap ${activeTab === tab
-                      ? 'bg-white text-blue-600 shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
-                    }`}
+                  onClick={() => {
+                    setActiveTab(tab);
+                    setCurrentPage(1);
+                  }}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+                    activeTab === tab
+                      ? 'bg-white text-blue-600 shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
                 >
                   {tab}
                 </button>
               ))}
             </div>
-            <div className="flex items-center gap-3 w-full sm:w-auto">
+
+            <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto">
+              {/* Search Input */}
               <div className="relative flex-1 sm:w-64">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
                   type="text"
-                  placeholder="Search identities..."
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                  value={searchTerm}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  placeholder="Search name, DID, role..."
+                  className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
                 />
               </div>
-              <button className="p-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors">
-                <Filter className="w-4 h-4" />
-              </button>
-              <div className="hidden sm:flex border border-slate-200 rounded-lg p-1">
-                <button className="p-1.5 bg-slate-100 rounded text-slate-700">
+
+              {/* Department Filter */}
+              <select
+                value={departmentFilter}
+                onChange={(e) => {
+                  setDepartmentFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+              >
+                <option value="All">All Departments</option>
+                {departments.filter((d) => d !== 'All').map((dept) => (
+                  <option key={dept} value={dept}>{dept}</option>
+                ))}
+              </select>
+
+              {/* Clearance Filter */}
+              <select
+                value={clearanceFilter}
+                onChange={(e) => {
+                  setClearanceFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+              >
+                <option value="All">All Clearances</option>
+                <option value="Top Secret (SCI)">Top Secret (SCI)</option>
+                <option value="Secret">Secret</option>
+                <option value="Confidential">Confidential</option>
+                <option value="Restricted">Restricted</option>
+              </select>
+
+              {/* Layout Toggle */}
+              <div className="flex border border-slate-200 rounded-xl p-0.5 bg-slate-50">
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                    viewMode === 'list' ? 'bg-white text-blue-600 shadow-2xs' : 'text-slate-400 hover:text-slate-700'
+                  }`}
+                  title="List View"
+                >
                   <List className="w-4 h-4" />
                 </button>
-                <button className="p-1.5 text-slate-400 hover:text-slate-700">
+                <button
+                  onClick={() => setViewMode('grid')}
+                  className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                    viewMode === 'grid' ? 'bg-white text-blue-600 shadow-2xs' : 'text-slate-400 hover:text-slate-700'
+                  }`}
+                  title="Grid View"
+                >
                   <LayoutGrid className="w-4 h-4" />
                 </button>
               </div>
@@ -142,192 +305,403 @@ export default function IdentityTable({ identities: propIdentities, onRefresh }:
           </div>
         </div>
 
-        {/* Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider border-b border-slate-200">
-                <th className="px-6 py-4 font-medium">Identity</th>
-                <th className="px-6 py-4 font-medium">DID</th>
-                <th className="px-6 py-4 font-medium">Wallet</th>
-                <th className="px-6 py-4 font-medium">Role</th>
-                <th className="px-6 py-4 font-medium">Status</th>
-                <th className="px-6 py-4 font-medium">Created</th>
-                <th className="px-6 py-4 font-medium text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filteredIdentities.map((identity) => (
-                <tr key={identity.id} className="hover:bg-slate-50/50 transition-colors">
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-sm shrink-0">
-                        {identity.name.charAt(0)}
+        {/* Main View: List or Grid */}
+        {viewMode === 'list' ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs whitespace-nowrap">
+              <thead>
+                <tr className="bg-slate-50/80 text-slate-500 font-bold uppercase tracking-wider border-b border-slate-200">
+                  <th className="px-6 py-3.5">Personnel & Avatar</th>
+                  <th className="px-6 py-3.5">Decentralized DID</th>
+                  <th className="px-6 py-3.5">Role</th>
+                  <th className="px-6 py-3.5">Department</th>
+                  <th className="px-6 py-3.5">Clearance</th>
+                  <th className="px-6 py-3.5">Status</th>
+                  <th className="px-6 py-3.5">Credentials</th>
+                  <th className="px-6 py-3.5">Last Active</th>
+                  <th className="px-6 py-3.5 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {paginatedIdentities.map((identity) => (
+                  <tr
+                    key={identity.id}
+                    className="hover:bg-slate-50/70 transition-colors group cursor-pointer"
+                    onClick={() => (onInspectIdentity ? onInspectIdentity(identity) : openDIDModal(identity, 'doc'))}
+                  >
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        {identity.avatar ? (
+                          <img
+                            src={identity.avatar}
+                            alt={identity.name}
+                            className="w-10 h-10 rounded-xl object-cover border border-slate-200 shadow-2xs shrink-0"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs shadow-2xs shrink-0">
+                            {identity.name.charAt(0)}
+                          </div>
+                        )}
+                        <div>
+                          <div className="font-bold text-slate-900 leading-tight flex items-center gap-1.5">
+                            {identity.name}
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-[11px] text-slate-400 font-mono">
+                              {identity.email}
+                            </span>
+                            {identity.employeeId && (
+                              <span className="text-[10px] text-slate-400 font-mono bg-slate-100 px-1.5 rounded">
+                                {identity.employeeId}
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      <div>
-                        <div className="font-medium text-slate-900">{identity.name}</div>
-                        <div className="text-xs text-slate-500">{identity.department}</div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-mono text-xs text-blue-600 font-semibold bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100 max-w-[140px] truncate">
+                          {identity.did}
+                        </span>
+                        <button
+                          onClick={(e) => copyToClipboard(identity.did, e)}
+                          title="Copy DID"
+                          className="p-1 text-slate-400 hover:text-blue-600 transition-colors cursor-pointer"
+                        >
+                          {copiedDid === identity.did ? (
+                            <Check className="w-3.5 h-3.5 text-emerald-600" />
+                          ) : (
+                            <Copy className="w-3.5 h-3.5" />
+                          )}
+                        </button>
                       </div>
-                    </div>
-                  </td>
-
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-mono text-xs text-slate-600 max-w-[120px] truncate">{identity.did}</span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-bold border ${getRoleBadge(identity.role)}`}>
+                        {identity.role}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 font-semibold text-slate-700">{identity.department}</td>
+                    <td className="px-6 py-4">{getClearanceBadge(identity.securityClearance)}</td>
+                    <td className="px-6 py-4">{getStatusBadge(identity.status)}</td>
+                    <td className="px-6 py-4">
+                      <span className="inline-flex items-center gap-1 text-[11px] font-mono font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md">
+                        <Award className="w-3 h-3 text-blue-600" />
+                        {identity.verifiableCredentialsCount ?? 2} VCs
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-xs text-slate-500 font-medium">{identity.lastActive}</td>
+                    <td className="px-6 py-4 text-right relative">
                       <button
-                        onClick={() => copyToClipboard(identity.fullDID, `did-${identity.id}`)}
-                        className="text-slate-400 hover:text-blue-600 transition-colors shrink-0"
-                        title="Copy full DID"
-                      >
-                        {copiedId === `did-${identity.id}`
-                          ? <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
-                          : <Copy className="w-3.5 h-3.5" />
-                        }
-                      </button>
-                    </div>
-                  </td>
-
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-mono text-xs text-slate-500">{truncate(identity.walletAddress, 10)}</span>
-                      <button
-                        onClick={() => copyToClipboard(identity.walletAddress, `wallet-${identity.id}`)}
-                        className="text-slate-400 hover:text-blue-600 transition-colors shrink-0"
-                        title="Copy wallet address"
-                      >
-                        {copiedId === `wallet-${identity.id}`
-                          ? <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
-                          : <Copy className="w-3.5 h-3.5" />
-                        }
-                      </button>
-                    </div>
-                  </td>
-
-                  <td className="px-6 py-4">
-                    <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-slate-100 text-slate-700">
-                      {identity.role}
-                    </span>
-                  </td>
-
-                  <td className="px-6 py-4">{getStatusBadge(identity.status)}</td>
-
-                  <td className="px-6 py-4 text-sm text-slate-600 whitespace-nowrap">{identity.createdOn}</td>
-
-                  <td className="px-6 py-4 text-right">
-                    <div className="relative inline-block">
-                      <button
-                        onClick={() => setOpenMenuId(openMenuId === identity.id ? null : identity.id)}
-                        className="p-2 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedActionId(selectedActionId === identity.id ? null : identity.id);
+                        }}
+                        className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
                       >
                         <MoreVertical className="w-4 h-4" />
                       </button>
 
-                      {openMenuId === identity.id && (
-                        <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-slate-200 rounded-xl shadow-lg z-20 py-1 text-sm">
-                          {[
-                            { icon: <FileText className="w-4 h-4" />, label: 'View DID Document', action: () => openModal(identity, 'doc') },
-                            { icon: <ShieldCheck className="w-4 h-4" />, label: 'Verify DID', action: () => openModal(identity, 'verify') },
-                            { icon: <QrCode className="w-4 h-4" />, label: 'QR Code', action: () => openModal(identity, 'qr') },
-                            { icon: <Award className="w-4 h-4" />, label: 'Issue Credential', action: () => openModal(identity, 'issue') },
-                            { icon: <Eye className="w-4 h-4" />, label: 'View Credentials', action: () => openModal(identity, 'credentials') },
-                          ].map(({ icon, label, action }) => (
+                      {selectedActionId === identity.id && (
+                        <div
+                          onClick={(e) => e.stopPropagation()}
+                          className="absolute right-6 top-10 w-52 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 z-30 text-left animate-in fade-in duration-100"
+                        >
+                          <button
+                            onClick={() => {
+                              if (onInspectIdentity) {
+                                onInspectIdentity(identity);
+                              } else {
+                                openDIDModal(identity, 'doc');
+                              }
+                              setSelectedActionId(null);
+                            }}
+                            className="w-full px-3.5 py-2 text-xs text-slate-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 cursor-pointer font-medium"
+                          >
+                            <FileText className="w-4 h-4 text-blue-600" />
+                            Inspect DID Document
+                          </button>
+                          <button
+                            onClick={() => openDIDModal(identity, 'verify')}
+                            className="w-full px-3.5 py-2 text-xs text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 flex items-center gap-2.5 cursor-pointer font-medium"
+                          >
+                            <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                            Verify DID On-Chain
+                          </button>
+                          <button
+                            onClick={() => openDIDModal(identity, 'qr')}
+                            className="w-full px-3.5 py-2 text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2.5 cursor-pointer font-medium"
+                          >
+                            <QrCode className="w-4 h-4 text-slate-500" />
+                            Show QR Code
+                          </button>
+                          <button
+                            onClick={() => openDIDModal(identity, 'issue')}
+                            className="w-full px-3.5 py-2 text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2.5 cursor-pointer font-medium"
+                          >
+                            <Award className="w-4 h-4 text-purple-600" />
+                            Issue Credential
+                          </button>
+                          <button
+                            onClick={() => openDIDModal(identity, 'credentials')}
+                            className="w-full px-3.5 py-2 text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2.5 cursor-pointer font-medium"
+                          >
+                            <Eye className="w-4 h-4 text-indigo-600" />
+                            View Credentials
+                          </button>
+                          <div className="my-1 border-t border-slate-100" />
+                          {onToggleStatus && (
                             <button
-                              key={label}
-                              onClick={action}
-                              className="w-full flex items-center gap-3 px-4 py-2.5 text-slate-700 hover:bg-slate-50 transition-colors"
+                              onClick={() => {
+                                onToggleStatus(identity.id);
+                                setSelectedActionId(null);
+                              }}
+                              className="w-full px-3.5 py-2 text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2.5 cursor-pointer font-medium"
                             >
-                              <span className="text-slate-400">{icon}</span>
-                              {label}
+                              {identity.status === 'Verified' ? (
+                                <>
+                                  <UserX className="w-4 h-4 text-rose-500" />
+                                  Revoke Status
+                                </>
+                              ) : (
+                                <>
+                                  <UserCheck className="w-4 h-4 text-emerald-500" />
+                                  Verify Identity
+                                </>
+                              )}
                             </button>
-                          ))}
+                          )}
+                          <button
+                            onClick={(e) => {
+                              copyToClipboard(identity.did, e);
+                              setSelectedActionId(null);
+                            }}
+                            className="w-full px-3.5 py-2 text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2.5 cursor-pointer font-medium"
+                          >
+                            <Copy className="w-4 h-4 text-slate-500" />
+                            Copy DID
+                          </button>
+                          {onDeleteIdentity && (
+                            <>
+                              <div className="my-1 border-t border-slate-100" />
+                              <button
+                                onClick={() => {
+                                  onDeleteIdentity(identity.id);
+                                  setSelectedActionId(null);
+                                }}
+                                className="w-full px-3.5 py-2 text-xs text-rose-600 hover:bg-rose-50 flex items-center gap-2.5 cursor-pointer font-medium"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                                Decommission DID
+                              </button>
+                            </>
+                          )}
                         </div>
                       )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          /* Grid Card View */
+          <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {paginatedIdentities.map((identity) => (
+              <div
+                key={identity.id}
+                onClick={() => (onInspectIdentity ? onInspectIdentity(identity) : openDIDModal(identity, 'doc'))}
+                className="bg-white rounded-2xl p-5 border border-slate-200 shadow-2xs hover:shadow-md transition-all cursor-pointer hover:border-blue-200 flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      {identity.avatar ? (
+                        <img
+                          src={identity.avatar}
+                          alt={identity.name}
+                          className="w-12 h-12 rounded-2xl object-cover border border-slate-200 shadow-2xs"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 rounded-2xl bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-sm shadow-2xs">
+                          {identity.name.charAt(0)}
+                        </div>
+                      )}
+                      <div>
+                        <h4 className="font-bold text-slate-900 text-sm leading-tight">
+                          {identity.name}
+                        </h4>
+                        <p className="text-[11px] text-slate-400 font-mono mt-0.5">
+                          {identity.employeeId || identity.email}
+                        </p>
+                      </div>
                     </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    {getStatusBadge(identity.status)}
+                  </div>
 
-          {filteredIdentities.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-12 text-slate-400">
-              <Shield className="w-10 h-10 mb-3 opacity-40" />
-              <p className="text-sm font-medium">No identities found</p>
-              <p className="text-xs mt-1">Try adjusting your filters or search query</p>
+                  <div className="space-y-2 py-2 border-y border-slate-100 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Department:</span>
+                      <span className="font-bold text-slate-700">{identity.department}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Role:</span>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${getRoleBadge(identity.role)}`}>
+                        {identity.role}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Clearance:</span>
+                      <span>{getClearanceBadge(identity.securityClearance)}</span>
+                    </div>
+                  </div>
+
+                  <div className="pt-2">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase">Decentralized DID:</span>
+                    <div className="flex items-center justify-between bg-slate-50 p-1.5 rounded-lg border border-slate-200 mt-1 font-mono text-[11px]">
+                      <span className="truncate max-w-[200px] text-blue-600 font-semibold">{identity.did}</span>
+                      <button
+                        onClick={(e) => copyToClipboard(identity.did, e)}
+                        className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
+                      >
+                        {copiedDid === identity.did ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                  <span className="text-[11px] text-slate-400 font-medium">
+                    Active: {identity.lastActive}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openDIDModal(identity, 'doc');
+                      }}
+                      className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      Inspect
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {filteredIdentities.length === 0 && (
+          <div className="p-12 text-center text-slate-400">
+            <Users className="w-8 h-8 mx-auto mb-2 opacity-40" />
+            <p className="text-xs font-bold">No decentralized identities found matching "{searchTerm}"</p>
+          </div>
+        )}
+
+        {/* Pagination Footer */}
+        <div className="p-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 bg-slate-50/50">
+          <div>
+            Showing {Math.min(filteredIdentities.length, (currentPage - 1) * itemsPerPage + 1)} - {Math.min(filteredIdentities.length, currentPage * itemsPerPage)} of {filteredIdentities.length} total identities
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-slate-400">Per page:</span>
+              <select
+                value={itemsPerPage}
+                onChange={(e) => {
+                  setItemsPerPage(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                className="border border-slate-200 rounded-lg px-2 py-1 bg-white text-xs text-slate-700 font-bold cursor-pointer"
+              >
+                <option value={5}>5</option>
+                <option value={10}>10</option>
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+              </select>
             </div>
-          )}
-        </div>
 
-        {/* Pagination */}
-        <div className="p-4 border-t border-slate-200 flex items-center justify-between text-sm text-slate-600">
-          <div>Showing 1 to {filteredIdentities.length} of {filteredIdentities.length} entries</div>
-          <div className="flex items-center gap-2">
-            <select className="border border-slate-200 rounded-md px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20">
-              <option>10 / page</option>
-              <option>20 / page</option>
-            </select>
-            <div className="flex items-center border border-slate-200 rounded-md overflow-hidden">
-              <button className="px-3 py-1 bg-slate-50 text-slate-400 border-r border-slate-200" disabled>Previous</button>
-              <button className="px-3 py-1 bg-white text-blue-600 font-medium">1</button>
-              <button className="px-3 py-1 bg-slate-50 text-slate-400 border-l border-slate-200" disabled>Next</button>
+            <div className="flex items-center gap-1">
+              <button
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed font-bold cursor-pointer"
+              >
+                Prev
+              </button>
+              <span className="px-2 font-mono font-bold text-slate-700">
+                {currentPage} / {totalPages}
+              </span>
+              <button
+                disabled={currentPage === totalPages}
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed font-bold cursor-pointer"
+              >
+                Next
+              </button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Overlay to close dropdown */}
-      {openMenuId && (
-        <div className="fixed inset-0 z-10" onClick={() => setOpenMenuId(null)} />
+      {/* Overlay to close action dropdown menu */}
+      {selectedActionId && (
+        <div className="fixed inset-0 z-20" onClick={() => setSelectedActionId(null)} />
       )}
 
-      {/* Modals */}
+      {/* DID Modals */}
       <DIDDocumentModal
         isOpen={activeModal === 'doc'}
         onClose={() => setActiveModal(null)}
-        identity={selectedIdentity}
+        identity={selectedIdentityForModal}
       />
 
       <VerifyDIDModal
         isOpen={activeModal === 'verify'}
         onClose={() => setActiveModal(null)}
-        identity={selectedIdentity}
+        identity={selectedIdentityForModal}
       />
 
       <QRCodeModal
         isOpen={activeModal === 'qr'}
         onClose={() => setActiveModal(null)}
-        identity={selectedIdentity}
+        identity={selectedIdentityForModal}
       />
 
       <IssueCredentialModal
         isOpen={activeModal === 'issue'}
         onClose={() => setActiveModal(null)}
-        identity={selectedIdentity}
+        identity={selectedIdentityForModal}
         onIssued={handleIssued}
       />
 
-      {/* View Credentials modal */}
+      {/* View Credentials Modal */}
       {activeModal === 'credentials' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
           <div className="fixed inset-0" onClick={() => setActiveModal(null)} aria-hidden="true" />
           <div className="relative w-full max-w-lg bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden z-10 flex flex-col max-h-[90vh]">
             <div className="flex items-center justify-between p-6 border-b border-slate-100 bg-slate-50/50">
               <div>
-                <h3 className="text-lg font-bold text-slate-900">Verifiable Credentials</h3>
-                <p className="text-xs text-slate-500">{selectedIdentity?.name}</p>
+                <h3 className="text-base font-bold text-slate-900">Verifiable Credentials</h3>
+                <p className="text-xs text-slate-500">{selectedIdentityForModal?.name}</p>
               </div>
-              <button onClick={() => setActiveModal(null)} className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100">
-                <Copy className="w-5 h-5" />
+              <button 
+                onClick={() => setActiveModal(null)} 
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 cursor-pointer"
+              >
+                ✕
               </button>
             </div>
             <div className="p-6 overflow-y-auto flex-1 space-y-3">
               {credentialsForView.length > 0 ? (
-                credentialsForView.map(vc => (
+                credentialsForView.map((vc) => (
                   <CredentialCard
                     key={vc.id}
                     vc={vc}
                     onVerify={(vcId) => {
-                      const found = credentialsForView.find(v => v.id === vcId);
+                      const found = credentialsForView.find((v) => v.id === vcId);
                       if (found) {
                         setVcToVerify(found);
                         setVerifyVCOpen(true);
@@ -338,13 +712,16 @@ export default function IdentityTable({ identities: propIdentities, onRefresh }:
               ) : (
                 <div className="text-center py-10 text-slate-400">
                   <Award className="w-10 h-10 mx-auto mb-3 opacity-40" />
-                  <p className="text-sm">No credentials issued yet</p>
+                  <p className="text-sm font-semibold">No credentials issued yet</p>
                   <p className="text-xs mt-1">Use "Issue Credential" from the actions menu</p>
                 </div>
               )}
             </div>
             <div className="p-4 px-6 border-t border-slate-100 bg-slate-50 flex justify-end">
-              <button onClick={() => setActiveModal(null)} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700">
+              <button 
+                onClick={() => setActiveModal(null)} 
+                className="px-4 py-2 text-xs font-bold text-white bg-blue-600 rounded-xl hover:bg-blue-700 cursor-pointer"
+              >
                 Close
               </button>
             </div>

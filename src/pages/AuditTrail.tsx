@@ -1,20 +1,40 @@
-import { useState, useMemo } from 'react';
-import {
-  Download,
-  RotateCw,
-  ChevronLeft,
-  ChevronRight,
-  CheckCircle2
+import { useState, useMemo, useEffect, useCallback } from 'react';
+import { 
+  Download, 
+  RotateCw, 
+  ChevronLeft, 
+  ChevronRight, 
+  CheckCircle2,
+  AlertCircle
 } from 'lucide-react';
 import StatCard from '../components/StatCard';
 import AuditFilterBar from '../components/audit/AuditFilterBar';
 import AuditTable from '../components/audit/AuditTable';
 import AuditDetailsDrawer from '../components/audit/AuditDetailsDrawer';
 import ExportLogsModal from '../components/audit/ExportLogsModal';
-import { auditStats, auditEventsMock, type AuditLogEvent } from '../data/auditData';
+import { type AuditLogEvent } from '../data/auditData';
+import { 
+  getAuditLogs, 
+  getAuditStatistics, 
+  subscribeToAuditLogs, 
+  type AuditStatsResult 
+} from '../services/auditService';
 import { getDIDAuditEvents } from '../lib/did/eventMappers';
 
 export default function AuditTrail() {
+  // Data State
+  const [events, setEvents] = useState<AuditLogEvent[]>([]);
+  const [stats, setStats] = useState<AuditStatsResult[]>([
+    { title: 'Total Events', value: '...', growth: '...', description: 'Lifetime platform events', icon: 'FileText' },
+    { title: "Today's Events", value: '...', growth: '...', description: 'Logged in the last 24 hours', icon: 'Activity' },
+    { title: 'Blockchain Events', value: '...', growth: '...', description: 'Verified on-chain transactions', icon: 'ShieldCheck' },
+    { title: 'Security Alerts', value: '...', growth: '...', description: 'Requires admin attention', icon: 'AlertTriangle' }
+  ]);
+  const [totalFilteredCount, setTotalFilteredCount] = useState(0);
+  const [totalTotalCount, setTotalTotalCount] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   // Filters State
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedEventType, setSelectedEventType] = useState('All Types');
@@ -31,12 +51,6 @@ export default function AuditTrail() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-
-  // Merge live DID/blockchain ledger events with platform audit events
-  const allEvents: AuditLogEvent[] = useMemo(
-    () => [...getDIDAuditEvents(), ...auditEventsMock],
-    []
-  );
 
   const activeFilterCount = useMemo(() => {
     let count = 0;
@@ -58,6 +72,68 @@ export default function AuditTrail() {
     selectedDateRange
   ]);
 
+  // Load audit data from Firestore + local DID event ledger
+  const loadAuditData = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setIsRefreshing(true);
+    else setIsLoading(true);
+    setError(null);
+
+    try {
+      const [logsRes, statsRes] = await Promise.all([
+        getAuditLogs({
+          searchQuery,
+          eventType: selectedEventType,
+          actor: selectedActor,
+          resourceType: selectedResourceType,
+          status: selectedStatus,
+          network: selectedNetwork,
+          dateRange: selectedDateRange,
+          page: currentPage,
+          pageSize,
+        }),
+        getAuditStatistics(),
+      ]);
+
+      // Merge newly generated DID events if any are present
+      const didEvents = getDIDAuditEvents?.() || [];
+      const mergedEvents = [...didEvents, ...logsRes.events];
+      const uniqueEvents = Array.from(new Map(mergedEvents.map(e => [e.id, e])).values());
+
+      setEvents(uniqueEvents.slice(0, pageSize));
+      setTotalFilteredCount(logsRes.totalFilteredCount + didEvents.length);
+      setTotalTotalCount(logsRes.totalTotalCount + didEvents.length);
+      setStats(statsRes);
+    } catch (err: any) {
+      console.error('Error loading audit trail:', err);
+      setError('Unable to load audit logs. Showing fallback data.');
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  }, [
+    searchQuery,
+    selectedEventType,
+    selectedActor,
+    selectedResourceType,
+    selectedStatus,
+    selectedNetwork,
+    selectedDateRange,
+    currentPage,
+    pageSize,
+  ]);
+
+  useEffect(() => {
+    loadAuditData();
+  }, [loadAuditData]);
+
+  // Real-time updates subscription
+  useEffect(() => {
+    const unsubscribe = subscribeToAuditLogs(() => {
+      getAuditStatistics().then(setStats).catch(() => {});
+    });
+    return () => unsubscribe();
+  }, []);
+
   const handleClearFilters = () => {
     setSearchQuery('');
     setSelectedEventType('All Types');
@@ -70,74 +146,10 @@ export default function AuditTrail() {
   };
 
   const handleRefresh = () => {
-    setIsRefreshing(true);
-    setTimeout(() => {
-      setIsRefreshing(false);
-    }, 600);
+    loadAuditData(true);
   };
 
-  // Filter Logic
-  const filteredEvents = useMemo(() => {
-    return allEvents.filter((item) => {
-      // Search matching (Event ID, Actor, Wallet, Tx, Resource, IP)
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matchesId = item.id.toLowerCase().includes(q);
-        const matchesActor = item.actor.name.toLowerCase().includes(q) || item.actor.role.toLowerCase().includes(q);
-        const matchesWallet = item.actor.address.toLowerCase().includes(q);
-        const matchesTx = item.txHash ? item.txHash.toLowerCase().includes(q) : false;
-        const matchesResource = item.resource.name.toLowerCase().includes(q) || item.resource.id.toLowerCase().includes(q);
-        const matchesIp = item.actor.ip.toLowerCase().includes(q);
-        const matchesAction = item.action.toLowerCase().includes(q);
-
-        if (!matchesId && !matchesActor && !matchesWallet && !matchesTx && !matchesResource && !matchesIp && !matchesAction) {
-          return false;
-        }
-      }
-
-      // Event Type
-      if (selectedEventType !== 'All Types' && item.eventType !== selectedEventType) {
-        return false;
-      }
-
-      // Actor
-      if (selectedActor !== 'All Actors' && item.actor.name !== selectedActor) {
-        return false;
-      }
-
-      // Resource Type
-      if (selectedResourceType !== 'All Resources' && item.resource.type !== selectedResourceType) {
-        return false;
-      }
-
-      // Status
-      if (selectedStatus !== 'All Statuses' && item.status !== selectedStatus) {
-        return false;
-      }
-
-      // Network
-      if (selectedNetwork !== 'All Networks' && item.network !== selectedNetwork) {
-        return false;
-      }
-
-      return true;
-    });
-  }, [
-    allEvents,
-    searchQuery,
-    selectedEventType,
-    selectedActor,
-    selectedResourceType,
-    selectedStatus,
-    selectedNetwork
-  ]);
-
-  // Paginated Events
-  const totalPages = Math.max(1, Math.ceil(filteredEvents.length / pageSize));
-  const paginatedEvents = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filteredEvents.slice(start, start + pageSize);
-  }, [filteredEvents, currentPage, pageSize]);
+  const totalPages = Math.max(1, Math.ceil(totalFilteredCount / pageSize));
 
   const handleSelectEvent = (event: AuditLogEvent) => {
     setSelectedEvent(event);
@@ -164,7 +176,7 @@ export default function AuditTrail() {
         <div className="flex items-center gap-3 shrink-0">
           <button
             onClick={handleRefresh}
-            className="p-2.5 bg-white hover:bg-slate-50 text-slate-600 hover:text-slate-900 border border-slate-200 rounded-lg transition-colors shadow-sm"
+            className="p-2.5 bg-white hover:bg-slate-50 text-slate-600 hover:text-slate-900 border border-slate-200 rounded-lg transition-colors shadow-sm cursor-pointer"
             title="Refresh Audit Logs"
           >
             <RotateCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-blue-600' : ''}`} />
@@ -172,7 +184,7 @@ export default function AuditTrail() {
 
           <button
             onClick={() => setIsExportModalOpen(true)}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm"
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm cursor-pointer"
           >
             <Download className="w-4 h-4" />
             Export Logs
@@ -180,9 +192,17 @@ export default function AuditTrail() {
         </div>
       </div>
 
+      {/* Error alert if any */}
+      {error && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-xl flex items-center gap-2 text-sm">
+          <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
       {/* 4 Compact Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        {auditStats.map((stat, index) => (
+        {stats.map((stat, index) => (
           <StatCard key={index} {...stat} />
         ))}
       </div>
@@ -229,19 +249,31 @@ export default function AuditTrail() {
       />
 
       {/* Audit Events Table */}
-      <AuditTable
-        events={paginatedEvents}
-        onSelectEvent={handleSelectEvent}
-        selectedEventId={selectedEvent?.id}
-      />
+      {isLoading && !isRefreshing ? (
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-12 text-center text-slate-500">
+          <div className="inline-block w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-3"></div>
+          <p className="font-semibold text-slate-700">Loading audit events from Firestore...</p>
+          <p className="text-xs text-slate-400 mt-1">Retrieving cryptographically verified platform events</p>
+        </div>
+      ) : (
+        <AuditTable
+          events={events}
+          onSelectEvent={handleSelectEvent}
+          selectedEventId={selectedEvent?.id}
+        />
+      )}
 
       {/* Pagination & Counter */}
       <div className="bg-white px-5 py-3.5 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4 text-xs font-medium text-slate-600">
         <div className="flex items-center gap-3">
           <span>
-            Showing <strong className="font-semibold text-slate-900">{filteredEvents.length > 0 ? (currentPage - 1) * pageSize + 1 : 0}</strong>–
-            <strong className="font-semibold text-slate-900">{Math.min(currentPage * pageSize, filteredEvents.length)}</strong> of{' '}
-            <strong className="font-semibold text-slate-900">{filteredEvents.length < allEvents.length ? `${filteredEvents.length} filtered (${allEvents.length} total)` : `${allEvents.length}`}</strong> events
+            Showing <strong className="font-semibold text-slate-900">{totalFilteredCount > 0 ? (currentPage - 1) * pageSize + 1 : 0}</strong>–
+            <strong className="font-semibold text-slate-900">{Math.min(currentPage * pageSize, totalFilteredCount)}</strong> of{' '}
+            <strong className="font-semibold text-slate-900">
+              {totalFilteredCount < totalTotalCount
+                ? `${totalFilteredCount} filtered (${totalTotalCount} total)`
+                : `${totalTotalCount}`}
+            </strong> events
           </span>
 
           <div className="flex items-center gap-1.5 ml-2 border-l border-slate-200 pl-3">
@@ -310,8 +342,8 @@ export default function AuditTrail() {
       <ExportLogsModal
         isOpen={isExportModalOpen}
         onClose={() => setIsExportModalOpen(false)}
-        filteredEvents={filteredEvents}
-        totalEventsCount={18642}
+        filteredEvents={events}
+        totalEventsCount={totalTotalCount}
       />
     </div>
   );

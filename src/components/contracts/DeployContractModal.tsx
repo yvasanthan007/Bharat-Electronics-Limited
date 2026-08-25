@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { X, Rocket, CheckCircle2 } from 'lucide-react';
 import type { SmartContractItem } from '../../data/contractData';
+import { createContractRecord } from '../../services/smartContractService';
+import { validateContractPayload } from '../../utils/validation';
 
 interface DeployContractModalProps {
   isOpen: boolean;
@@ -21,83 +23,31 @@ export default function DeployContractModal({
   const [owner, setOwner] = useState('0x7f824589d1b09872e45210c4391a82f3a3b910cd');
   const [isDeploying, setIsDeploying] = useState(false);
   const [deployedSuccess, setDeployedSuccess] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return;
+    setValidationError(null);
+
+    const validation = validateContractPayload({ name, type, network, owner });
+    if (!validation.isValid) {
+      setValidationError(validation.error || 'Invalid input');
+      return;
+    }
 
     setIsDeploying(true);
 
-    setTimeout(() => {
-      const generatedAddress = '0x' + Array.from({ length: 40 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
-      
-      const newContract: SmartContractItem = {
-        id: `CTR-${Math.floor(100 + Math.random() * 900)}`,
-        name: name.trim(),
-        symbol: symbol.trim() || `BEL-${name.slice(0, 3).toUpperCase()}`,
+    try {
+      const newContract = await createContractRecord({
+        name,
+        symbol,
         type,
         network,
-        chainId: network === 'Ethereum' ? 1 : network === 'Polygon' ? 137 : network === 'BNB Chain' ? 56 : 2026,
-        address: generatedAddress,
-        version: 'v1.0.0',
-        verification: {
-          status: 'Verified',
-          sourceVerified: true,
-          abiAvailable: true,
-          compiler: 'v0.8.24+commit.e11b9ed9',
-          license: 'MIT',
-          verifiedAt: `${new Date().toISOString().split('T')[0]} 12:00 UTC`
-        },
-        status: 'Active',
-        transactionsCount: 1,
-        lastActivity: 'Just now',
+        description,
         owner,
-        ownerName: 'Rahul Verma (Admin)',
-        deployedAt: `${new Date().toISOString().split('T')[0]} 12:00 UTC`,
-        lastUpdated: `${new Date().toISOString().split('T')[0]} 12:00 UTC`,
-        description: description.trim() || `Newly deployed ${type} smart contract on ${network}.`,
-        security: {
-          status: 'Healthy',
-          checks: [
-            { label: 'Source Code Verified', passed: true, description: 'Solidity 0.8.24' },
-            { label: 'Contract Address Verified', passed: true, description: 'Registered in BEL genesis' },
-            { label: 'Ownership Configured', passed: true, description: 'Admin wallet assigned' },
-            { label: 'Access Control Enabled', passed: true, description: 'OpenZeppelin RBAC v5.0' },
-            { label: 'No Critical Alerts', passed: true, description: 'Zero audit warnings' }
-          ]
-        },
-        functions: [
-          {
-            name: 'getOwner',
-            signature: 'getOwner()',
-            type: 'read',
-            accessLevel: 'Public',
-            lastCalled: 'Just now',
-            callsCount: 1,
-            description: 'Returns contract owner address.',
-            inputs: [],
-            returnType: 'address owner'
-          }
-        ],
-        recentActivity: [
-          {
-            txHash: '0x' + Array.from({ length: 40 }, () => Math.floor(Math.random() * 16).toString(16)).join(''),
-            functionName: 'deploy()',
-            caller: 'Rahul Verma',
-            callerAddress: owner,
-            timestamp: 'Just now',
-            gasUsed: '840,100 gas',
-            status: 'Success'
-          }
-        ],
-        chartData: {
-          '7d': [{ name: 'Today', value: 1 }],
-          '30d': [{ name: 'Week 1', value: 1 }],
-          '90d': [{ name: 'Month 1', value: 1 }]
-        }
-      };
+      });
 
       setIsDeploying(false);
       setDeployedSuccess(true);
@@ -105,9 +55,17 @@ export default function DeployContractModal({
 
       setTimeout(() => {
         setDeployedSuccess(false);
+        // Reset form
+        setName('');
+        setSymbol('');
+        setDescription('');
         onClose();
       }, 1200);
-    }, 1000);
+    } catch (err: any) {
+      console.error('Error creating contract record:', err);
+      setIsDeploying(false);
+      setValidationError('Failed to save contract record. Please try again.');
+    }
   };
 
   return (
@@ -131,11 +89,18 @@ export default function DeployContractModal({
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+            className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Validation error if any */}
+        {validationError && (
+          <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg">
+            {validationError}
+          </div>
+        )}
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -245,7 +210,7 @@ export default function DeployContractModal({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-colors"
+              className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-colors cursor-pointer"
             >
               Cancel
             </button>
@@ -253,17 +218,17 @@ export default function DeployContractModal({
             <button
               type="submit"
               disabled={isDeploying || deployedSuccess}
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 shadow-sm"
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 shadow-sm cursor-pointer"
             >
               {deployedSuccess ? (
                 <>
                   <CheckCircle2 className="w-4 h-4 text-white" />
-                  Deployed Successfully!
+                  Contract Record Created!
                 </>
               ) : isDeploying ? (
                 <>
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Deploying to Network...
+                  Registering Contract...
                 </>
               ) : (
                 <>

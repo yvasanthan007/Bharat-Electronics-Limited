@@ -13,6 +13,7 @@ import {
   Code
 } from 'lucide-react';
 import type { AuditLogEvent } from '../../data/auditData';
+import { getExplorerTxUrl } from '../../utils/explorerUtils';
 
 interface AuditDetailsDrawerProps {
   event: AuditLogEvent | null;
@@ -185,7 +186,7 @@ export default function AuditDetailsDrawer({
                     {copiedKey === 'txHash' ? 'Copied' : 'Copy'}
                   </button>
                   <a
-                    href={`https://etherscan.io/tx/${event.txHash}`}
+                    href={getExplorerTxUrl(event.network, event.txHash)}
                     target="_blank"
                     rel="noreferrer"
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-medium transition-colors"
