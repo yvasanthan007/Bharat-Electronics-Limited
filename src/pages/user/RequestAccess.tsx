@@ -1,0 +1,150 @@
+import { useState, useEffect } from 'react';
+import { KeyRound, Send, CheckCircle2 } from 'lucide-react';
+import {
+  getAccessRequests, submitAccessRequest,
+  AVAILABLE_RESOURCES, type AccessRequest,
+} from '../../services/userPortal';
+
+const statusStyle: Record<string, string> = {
+  Pending:  'bg-amber-50 text-amber-700 border border-amber-200',
+  Approved: 'bg-green-50 text-green-700 border border-green-200',
+  Rejected: 'bg-red-50 text-red-700 border border-red-200',
+};
+
+export default function RequestAccess() {
+  const [resource, setResource] = useState('');
+  const [reason, setReason] = useState('');
+  const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [requests, setRequests] = useState<AccessRequest[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      const data = await getAccessRequests();
+      setRequests(data);
+      setLoading(false);
+    };
+    load();
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resource || !reason) return;
+    setSubmitting(true);
+    const ok = await submitAccessRequest(resource, reason);
+    setSubmitting(false);
+    if (ok) {
+      setSubmitted(true);
+      setResource('');
+      setReason('');
+      // Refresh list
+      const updated = await getAccessRequests();
+      setRequests(updated);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-3xl mx-auto space-y-6 pb-8">
+      <div>
+        <h2 className="text-xl font-bold text-slate-900">Request Access</h2>
+        <p className="text-sm text-slate-500 mt-0.5">Submit a request to access BEL resources and systems.</p>
+      </div>
+
+      {/* Form */}
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm">
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+          <KeyRound className="w-4 h-4 text-blue-600" />
+          <h3 className="font-semibold text-slate-800">New Access Request</h3>
+        </div>
+
+        {submitted ? (
+          <div className="p-10 flex flex-col items-center gap-3 text-center">
+            <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center">
+              <CheckCircle2 className="w-7 h-7 text-green-600" />
+            </div>
+            <p className="font-semibold text-slate-800">Request Submitted!</p>
+            <p className="text-sm text-slate-500">Your access request has been submitted and is awaiting approval.</p>
+            <button onClick={() => setSubmitted(false)} className="mt-2 px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors">
+              Submit Another
+            </button>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="p-5 space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">Select Resource</label>
+              <select
+                value={resource}
+                onChange={(e) => setResource(e.target.value)}
+                className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                required
+              >
+                <option value="">Choose a resource...</option>
+                {AVAILABLE_RESOURCES.map((r) => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">Reason for Access</label>
+              <textarea
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                rows={4}
+                placeholder="Briefly explain why you need this access..."
+                className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                required
+              />
+            </div>
+            <div className="flex justify-end">
+              <button
+                type="submit"
+                disabled={submitting}
+                className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-sm shadow-blue-500/30 disabled:opacity-50"
+              >
+                {submitting ? (
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <Send className="w-4 h-4" />
+                )}
+                {submitting ? 'Submitting...' : 'Submit Request'}
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+
+      {/* Existing Requests */}
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm">
+        <div className="px-5 py-4 border-b border-slate-100">
+          <h3 className="font-semibold text-slate-800">My Requests</h3>
+        </div>
+        <div className="divide-y divide-slate-50">
+          {requests.length === 0 ? (
+            <div className="px-5 py-8 text-center text-sm text-slate-400">No requests yet</div>
+          ) : requests.map((req) => (
+            <div key={req.id} className="flex items-center gap-4 px-5 py-4">
+              <div className="w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center shrink-0">
+                <KeyRound className="w-4 h-4 text-blue-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-slate-800 truncate">{req.resource}</p>
+                <p className="text-xs text-slate-400">{req.id} · Submitted {req.submitted}</p>
+              </div>
+              <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${statusStyle[req.status]}`}>
+                {req.status}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}

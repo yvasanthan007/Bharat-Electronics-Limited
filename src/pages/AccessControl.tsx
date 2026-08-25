@@ -5,13 +5,14 @@ import RolesTable from '../components/RolesTable';
 import PermissionMatrix from '../components/PermissionMatrix';
 import AccessRequests from '../components/AccessRequests';
 import AccessModals from '../components/AccessModals';
+import DIDAccessChecker from '../components/access/DIDAccessChecker';
 
 export default function AccessControl() {
   const [createRoleOpen, setCreateRoleOpen] = useState(false);
   const [assignAccessOpen, setAssignAccessOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState('Roles');
+  const [activeTab, setActiveTab] = useState('DID Authorization');
 
-  const tabs = ['Roles', 'Users', 'Permissions', 'Access Requests', 'Session Logs'];
+  const tabs = ['DID Authorization', 'Roles', 'Users', 'Permissions', 'Access Requests', 'Session Logs'];
 
   return (
     <div className="max-w-7xl mx-auto space-y-8">
@@ -26,9 +27,9 @@ export default function AccessControl() {
             <p className="text-sm text-slate-500">Manage roles, permissions and user access across the platform</p>
           </div>
         </div>
-        
+
         <div className="flex flex-wrap items-center gap-3">
-          <button 
+          <button
             onClick={() => setCreateRoleOpen(true)}
             className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
           >
@@ -38,7 +39,7 @@ export default function AccessControl() {
           <button className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
             Permission Matrix
           </button>
-          <button 
+          <button
             onClick={() => setAssignAccessOpen(true)}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 border border-transparent rounded-lg text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm"
           >
@@ -57,17 +58,16 @@ export default function AccessControl() {
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-all whitespace-nowrap ${
-                activeTab === tab
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-all whitespace-nowrap ${activeTab === tab
                   ? 'bg-white text-blue-600 shadow-sm'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
-              }`}
+                }`}
             >
               {tab}
             </button>
           ))}
         </div>
-        
+
         <div className="flex items-center gap-3 w-full sm:w-auto">
           <div className="relative flex-1 sm:w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -84,16 +84,23 @@ export default function AccessControl() {
         </div>
       </div>
 
+      {/* DID-Based Authorization (DID → Verified Credential → Role → Permission) */}
+      {activeTab === 'DID Authorization' && <DIDAccessChecker />}
+
       {/* Two Column Layout for Roles and Permissions */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <RolesTable />
-        <PermissionMatrix />
-      </div>
+      {activeTab !== 'DID Authorization' && (
+        <>
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <RolesTable />
+            <PermissionMatrix />
+          </div>
 
-      {/* Access Requests Full Width */}
-      <AccessRequests />
+          {/* Access Requests Full Width */}
+          <AccessRequests />
+        </>
+      )}
 
-      <AccessModals 
+      <AccessModals
         createRoleOpen={createRoleOpen}
         setCreateRoleOpen={setCreateRoleOpen}
         assignAccessOpen={assignAccessOpen}
