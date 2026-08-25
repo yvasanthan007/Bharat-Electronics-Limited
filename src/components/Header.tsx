@@ -1,6 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, Sun, Moon, Bell, ChevronDown, User, Settings, Shield, LogOut, CheckCircle2, ExternalLink, X } from 'lucide-react';
+import { 
+  Search, Sun, Moon, Bell, ChevronDown, User, Settings, 
+  Shield, LogOut, CheckCircle2, ExternalLink, X, Wallet, Copy, Link2 
+} from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useWallet } from '../context/WalletContext';
 
 export default function Header() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -8,6 +12,10 @@ export default function Header() {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [walletMenuOpen, setWalletMenuOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const { address, isConnected, isDemo, isConnecting, error: walletError, linkedDID, connect, disconnect } = useWallet();
   const navigate = useNavigate();
 
   const [notifications, setNotifications] = useState([
@@ -40,6 +48,7 @@ export default function Header() {
   const searchRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const walletMenuRef = useRef<HTMLDivElement>(null);
 
   // Initialize and synchronize Dark Mode
   useEffect(() => {
@@ -78,6 +87,9 @@ export default function Header() {
       if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
         setIsUserMenuOpen(false);
       }
+      if (walletMenuRef.current && !walletMenuRef.current.contains(event.target as Node)) {
+        setWalletMenuOpen(false);
+      }
       if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
         setIsSearchOpen(false);
       }
@@ -86,6 +98,16 @@ export default function Header() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  const truncateAddress = (addr: string) =>
+    `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+
+  const copyAddress = () => {
+    if (!address) return;
+    navigator.clipboard.writeText(address);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
@@ -196,6 +218,94 @@ export default function Header() {
         >
           {isDarkMode ? <Moon className="w-5 h-5 text-indigo-400" /> : <Sun className="w-5 h-5 text-amber-500" />}
         </button>
+
+        {/* Wallet Connect / Status */}
+        {!isConnected ? (
+          <div className="flex flex-col items-end gap-1">
+            <button
+              onClick={connect}
+              disabled={isConnecting}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs font-semibold rounded-lg transition-colors shadow-xs cursor-pointer"
+            >
+              <Wallet className="w-3.5 h-3.5" />
+              {isConnecting ? 'Connecting...' : 'Connect Wallet'}
+            </button>
+            {walletError && (
+              <span className="text-[10px] text-red-600 font-medium max-w-[180px] truncate" title={walletError}>
+                {walletError}
+              </span>
+            )}
+          </div>
+        ) : (
+          <div className="relative" ref={walletMenuRef}>
+            <button
+              onClick={() => setWalletMenuOpen(!walletMenuOpen)}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs transition-colors cursor-pointer ${
+                isDemo
+                  ? 'border-amber-200 bg-amber-50 hover:bg-amber-100'
+                  : 'border-emerald-200 bg-emerald-50 hover:bg-emerald-100'
+              }`}
+            >
+              <span className={`w-2 h-2 rounded-full ${isDemo ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+              <Wallet className="w-3.5 h-3.5 text-slate-600" />
+              <span className="font-mono text-xs font-semibold text-slate-700">
+                {address && truncateAddress(address)}
+              </span>
+              {isDemo && (
+                <span className="text-[9px] font-bold uppercase tracking-wide text-amber-700 bg-amber-100 px-1 py-0.2 rounded">
+                  Demo
+                </span>
+              )}
+              <ChevronDown className="w-3 h-3 text-slate-400" />
+            </button>
+
+            {walletMenuOpen && (
+              <div className="absolute right-0 top-full mt-2 w-72 bg-white border border-slate-200 rounded-xl shadow-lg z-50 py-2 text-xs">
+                <div className="px-4 py-2 border-b border-slate-100">
+                  <p className="text-[11px] text-slate-500 mb-1">Connected Wallet</p>
+                  <div className="flex items-center gap-2">
+                    <code className="font-mono text-xs text-slate-800 break-all flex-1">{address}</code>
+                    <button
+                      onClick={copyAddress}
+                      className="shrink-0 p-1 text-slate-400 hover:text-blue-600 cursor-pointer"
+                      title="Copy address"
+                    >
+                      {copied ? <CheckCircle2 className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-1.5">
+                    {isDemo ? 'Demo mode — ephemeral defense wallet active' : 'Browser Web3 wallet connected'}
+                  </p>
+                </div>
+
+                <div className="px-4 py-2 border-b border-slate-100">
+                  <p className="text-[11px] text-slate-500 mb-1">Linked DID</p>
+                  {linkedDID ? (
+                    <div className="flex items-center gap-1.5">
+                      <Link2 className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                      <code className="font-mono text-xs text-slate-700 truncate">{linkedDID}</code>
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-slate-400 italic">
+                      No DID linked yet — generate or link in Identities
+                    </p>
+                  )}
+                </div>
+
+                <button
+                  onClick={() => {
+                    disconnect();
+                    setWalletMenuOpen(false);
+                  }}
+                  className="w-full flex items-center gap-2 px-4 py-2 text-rose-600 hover:bg-rose-50 transition-colors font-medium cursor-pointer"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  Disconnect Wallet
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Notification Bell with Dropdown */}
         <div className="relative" ref={notifRef}>

@@ -5,6 +5,7 @@ import TransactionsChart from '../components/TransactionsChart';
 import RoleChart from '../components/RoleChart';
 import QuickActions from '../components/QuickActions';
 import BlockchainStatus from '../components/BlockchainStatus';
+import DIDActivityFeed from '../components/dashboard/DIDActivityFeed';
 import { mockData } from '../data/mockData';
 import { ShieldCheck } from 'lucide-react';
 
@@ -49,6 +50,9 @@ export default function Dashboard() {
           <ActivityList activities={mockData.activities} />
         </div>
       </div>
+
+      {/* Live DID / Credential / Access blockchain activity */}
+      <DIDActivityFeed />
 
       {/* Blockchain Status */}
       <BlockchainStatus data={mockData.blockchainStatus} />

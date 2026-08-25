@@ -19,6 +19,7 @@ import {
   subscribeToAuditLogs, 
   type AuditStatsResult 
 } from '../services/auditService';
+import { getDIDAuditEvents } from '../lib/did/eventMappers';
 
 export default function AuditTrail() {
   // Data State
@@ -71,7 +72,7 @@ export default function AuditTrail() {
     selectedDateRange
   ]);
 
-  // Load audit data from Firestore
+  // Load audit data from Firestore + local DID event ledger
   const loadAuditData = useCallback(async (isRefresh = false) => {
     if (isRefresh) setIsRefreshing(true);
     else setIsLoading(true);
@@ -93,9 +94,14 @@ export default function AuditTrail() {
         getAuditStatistics(),
       ]);
 
-      setEvents(logsRes.events);
-      setTotalFilteredCount(logsRes.totalFilteredCount);
-      setTotalTotalCount(logsRes.totalTotalCount);
+      // Merge newly generated DID events if any are present
+      const didEvents = getDIDAuditEvents?.() || [];
+      const mergedEvents = [...didEvents, ...logsRes.events];
+      const uniqueEvents = Array.from(new Map(mergedEvents.map(e => [e.id, e])).values());
+
+      setEvents(uniqueEvents.slice(0, pageSize));
+      setTotalFilteredCount(logsRes.totalFilteredCount + didEvents.length);
+      setTotalTotalCount(logsRes.totalTotalCount + didEvents.length);
       setStats(statsRes);
     } catch (err: any) {
       console.error('Error loading audit trail:', err);
@@ -123,7 +129,6 @@ export default function AuditTrail() {
   // Real-time updates subscription
   useEffect(() => {
     const unsubscribe = subscribeToAuditLogs(() => {
-      // Refresh stats on new events in real-time
       getAuditStatistics().then(setStats).catch(() => {});
     });
     return () => unsubscribe();
@@ -303,11 +308,10 @@ export default function AuditTrail() {
             <button
               key={pageNum}
               onClick={() => setCurrentPage(pageNum)}
-              className={`w-7 h-7 rounded-lg text-xs font-semibold transition-colors ${
-                currentPage === pageNum
+              className={`w-7 h-7 rounded-lg text-xs font-semibold transition-colors ${currentPage === pageNum
                   ? 'bg-blue-600 text-white'
                   : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-              }`}
+                }`}
             >
               {pageNum}
             </button>

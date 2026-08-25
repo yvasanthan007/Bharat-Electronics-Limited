@@ -1,10 +1,15 @@
-import { useState, useEffect } from 'react';
-import { Download, Upload, Plus, Check, ShieldCheck } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Download, Upload, Plus, ShieldCheck, Check, Fingerprint } from 'lucide-react';
 import IdentityStats from '../components/IdentityStats';
 import IdentityTable from '../components/IdentityTable';
 import CreateIdentityModal from '../components/CreateIdentityModal';
+import CreateDIDModal from '../components/did/CreateDIDModal';
 import ImportIdentitiesModal from '../components/ImportIdentitiesModal';
 import DidDocumentModal from '../components/DidDocumentModal';
+import { useWallet } from '../context/WalletContext';
+import { associateWalletWithDID } from '../services/wallet';
+import type { DIDIdentity } from '../data/mockDIDData';
+import type { GeneratedDID } from '../lib/did/didEngine';
 import { 
   getIdentities, 
   saveIdentities, 
@@ -26,23 +31,32 @@ export default function Identities() {
     revokedGrowth: '0%',
   });
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isCreateDIDModalOpen, setIsCreateDIDModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [selectedDidForInspection, setSelectedDidForInspection] = useState<Identity | null>(null);
   const [isExported, setIsExported] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  useEffect(() => {
+  const { address: walletAddress, isConnected, refreshLinkedDID } = useWallet();
+
+  const loadData = useCallback(() => {
     const list = getIdentities();
     setIdentities(list);
     setStats(calculateIdentityStats(list));
     setLoading(false);
   }, []);
 
+  useEffect(() => {
+    loadData();
+  }, [loadData, refreshKey]);
+
   const handleAddIdentity = (newIdentity: Identity) => {
     const updated = [newIdentity, ...identities];
     setIdentities(updated);
     saveIdentities(updated);
     setStats(calculateIdentityStats(updated));
+    setRefreshKey((k) => k + 1);
   };
 
   const handleImportIdentities = (newIdentities: Identity[]) => {
@@ -50,6 +64,7 @@ export default function Identities() {
     setIdentities(updated);
     saveIdentities(updated);
     setStats(calculateIdentityStats(updated));
+    setRefreshKey((k) => k + 1);
   };
 
   const handleToggleStatus = (id: string) => {
@@ -63,6 +78,7 @@ export default function Identities() {
     setIdentities(updated);
     saveIdentities(updated);
     setStats(calculateIdentityStats(updated));
+    setRefreshKey((k) => k + 1);
   };
 
   const handleDeleteIdentity = (id: string) => {
@@ -70,7 +86,17 @@ export default function Identities() {
     setIdentities(updated);
     saveIdentities(updated);
     setStats(calculateIdentityStats(updated));
+    setRefreshKey((k) => k + 1);
   };
+
+  const handleDIDCreated = useCallback((_identity: DIDIdentity, generated: GeneratedDID) => {
+    if (isConnected && walletAddress) {
+      associateWalletWithDID(walletAddress, generated.did);
+      refreshLinkedDID();
+    }
+    loadData();
+    setRefreshKey((k) => k + 1);
+  }, [isConnected, walletAddress, refreshLinkedDID, loadData]);
 
   const handleExport = () => {
     const exportPayload = {
@@ -162,6 +188,14 @@ export default function Identities() {
           </button>
 
           <button
+            onClick={() => setIsCreateDIDModalOpen(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer"
+          >
+            <Fingerprint className="w-3.5 h-3.5 text-indigo-600" />
+            Generate DID
+          </button>
+
+          <button
             onClick={() => setIsCreateModalOpen(true)}
             className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 border border-transparent rounded-xl text-xs font-bold text-white hover:bg-blue-700 transition-all shadow-xs cursor-pointer"
           >
@@ -172,14 +206,16 @@ export default function Identities() {
       </div>
 
       {/* Dynamic Stats Cards */}
-      <IdentityStats stats={stats} />
+      <IdentityStats stats={stats} refreshKey={refreshKey} />
 
       {/* Main Interactive Table */}
       <IdentityTable
+        key={refreshKey}
         identities={identities}
         onToggleStatus={handleToggleStatus}
         onDeleteIdentity={handleDeleteIdentity}
         onInspectIdentity={(identity) => setSelectedDidForInspection(identity)}
+        onRefresh={() => setRefreshKey((k) => k + 1)}
       />
 
       {/* Create Identity Modal */}
@@ -187,6 +223,13 @@ export default function Identities() {
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
         onAddIdentity={handleAddIdentity}
+      />
+
+      {/* Create DID Modal with Crypto Key Generation */}
+      <CreateDIDModal
+        isOpen={isCreateDIDModalOpen}
+        onClose={() => setIsCreateDIDModalOpen(false)}
+        onDIDCreated={handleDIDCreated}
       />
 
       {/* Import Identities Modal */}

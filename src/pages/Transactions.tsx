@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Download, FileText, Link, UploadCloud, Check, RefreshCw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { getTransactions, getTransactionSummary, type Transaction, type TransactionSummaryData } from '../services/transactions';
+import { getDIDTransactions } from '../lib/did/eventMappers';
 import TransactionSummary from '../components/transactions/TransactionSummary';
 import TransactionFilters from '../components/transactions/TransactionFilters';
 import TransactionsTable from '../components/transactions/TransactionsTable';
@@ -19,11 +20,16 @@ export default function Transactions() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [txData, sumData] = await Promise.all([
+        const [txData, sumData, didTx] = await Promise.all([
           getTransactions(),
           getTransactionSummary(),
+          Promise.resolve(getDIDTransactions()),
         ]);
-        setTransactions(txData);
+        // Merge live DID/blockchain events with wallet transactions (newest first)
+        const merged = [...didTx, ...txData].sort(
+          (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+        );
+        setTransactions(merged);
         setSummary(sumData);
       } catch (error) {
         console.error("Failed to fetch transactions:", error);
@@ -47,7 +53,7 @@ export default function Transactions() {
     const blob = new Blob([headers + rows], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const downloadAnchor = document.createElement('a');
-    downloadAnchor.setAttribute('href', url);
+    downloadAnchor.setAttribute("href", url);
     downloadAnchor.setAttribute(
       'download',
       `BEL_Transactions_Ledger_${new Date().toISOString().split('T')[0]}.csv`
@@ -102,7 +108,7 @@ export default function Transactions() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Transactions & Gas Ledger</h1>
-          <p className="text-slate-500 text-xs mt-1">Real-time immutable ledger receipts, gas benchmarks and fraud detection.</p>
+          <p className="text-slate-500 text-xs mt-1">Real-time immutable ledger receipts, gas benchmarks, DID events, and fraud detection.</p>
         </div>
         <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
           <button

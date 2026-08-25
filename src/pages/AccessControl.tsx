@@ -6,6 +6,7 @@ import PermissionMatrix from '../components/PermissionMatrix';
 import AccessRequests from '../components/AccessRequests';
 import AccessModals from '../components/AccessModals';
 import FullMatrixModal from '../components/FullMatrixModal';
+import DIDAccessChecker from '../components/access/DIDAccessChecker';
 import { mockRoles, mockPermissionMatrix, type Role } from '../data/mockData';
 
 const ROLES_STORAGE_KEY = 'bel_access_roles';
@@ -28,7 +29,7 @@ export default function AccessControl() {
   const [createRoleOpen, setCreateRoleOpen] = useState(false);
   const [assignAccessOpen, setAssignAccessOpen] = useState(false);
   const [isFullMatrixOpen, setIsFullMatrixOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'Roles' | 'Permissions' | 'Access Requests'>('Roles');
+  const [activeTab, setActiveTab] = useState<'DID Authorization' | 'Roles' | 'Permissions' | 'Access Requests'>('DID Authorization');
   const [searchTerm, setSearchTerm] = useState('');
   
   // Filter Dropdown State
@@ -37,7 +38,12 @@ export default function AccessControl() {
   const [quorumFilter, setQuorumFilter] = useState<'All' | 'Multisig' | 'Single'>('All');
   const filterRef = useRef<HTMLDivElement>(null);
 
-  const tabs: Array<'Roles' | 'Permissions' | 'Access Requests'> = ['Roles', 'Permissions', 'Access Requests'];
+  const tabs: Array<'DID Authorization' | 'Roles' | 'Permissions' | 'Access Requests'> = [
+    'DID Authorization', 
+    'Roles', 
+    'Permissions', 
+    'Access Requests'
+  ];
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -113,7 +119,7 @@ export default function AccessControl() {
             <Layers className="w-4 h-4 text-blue-600" />
             View Full Matrix
           </button>
-          <button 
+          <button
             onClick={() => setAssignAccessOpen(true)}
             className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 border border-transparent rounded-xl text-xs font-bold text-white hover:bg-blue-700 transition-all shadow-xs cursor-pointer"
           >
@@ -146,7 +152,7 @@ export default function AccessControl() {
             </button>
           ))}
         </div>
-        
+
         <div className="flex items-center gap-3 w-full sm:w-auto">
           {/* Active Live Search */}
           <div className="relative flex-1 sm:w-72">
@@ -253,6 +259,10 @@ export default function AccessControl() {
       </div>
 
       {/* Dynamic Tab Views */}
+      {activeTab === 'DID Authorization' && (
+        <DIDAccessChecker />
+      )}
+
       {activeTab === 'Roles' && (
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           <RolesTable 

@@ -1,10 +1,11 @@
 import { useState, type FormEvent } from 'react';
 import { Wallet, ShieldCheck, Lock, CheckCircle2, ArrowRight, Mail, UserCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useWallet } from '../context/WalletContext';
 import { auth, db } from '../lib/firebase';
-import { 
-  createUserWithEmailAndPassword, 
-  signInWithEmailAndPassword 
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword
 } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
@@ -15,7 +16,7 @@ const AuthCard = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isWalletLoading, setIsWalletLoading] = useState(false);
+  const { isConnecting: isWalletLoading, error: walletError, isConnected: walletConnected, connect: connectWallet } = useWallet();
   const navigate = useNavigate();
 
   const handleAuth = async (e: FormEvent) => {
@@ -54,7 +55,7 @@ const AuthCard = () => {
         // Create user in Firebase Auth
         const userCredential = await createUserWithEmailAndPassword(auth, cleanId, password);
         const user = userCredential.user;
-        
+
         // Save additional user details in Firestore
         await setDoc(doc(db, 'users', user.uid), {
           employeeId: employeeId,
@@ -66,7 +67,7 @@ const AuthCard = () => {
         // Log in user
         await signInWithEmailAndPassword(auth, cleanId, password);
       }
-      
+
       setIsLoading(false);
       localStorage.setItem('bel_user', JSON.stringify({
         name: employeeId || 'BEL Officer',
@@ -82,19 +83,18 @@ const AuthCard = () => {
     }
   };
 
-  const handleWalletConnect = () => {
-    setIsWalletLoading(true);
-    setTimeout(() => {
-      setIsWalletLoading(false);
-      localStorage.setItem('bel_user', JSON.stringify({
-        name: 'BEL Admin',
-        email: 'bel.admin@gmail',
-        role: 'Administrator',
-        did: 'did:bel:sov:admin01'
-      }));
+  // Connects a real browser wallet (MetaMask) or falls back to an
+  // ephemeral demo wallet when no provider is available.
+  const handleWalletConnect = async () => {
+    try {
+      await connectWallet();
       navigate('/bel');
-    }, 600);
+    } catch {
+      // Error state is surfaced through the wallet context
+    }
   };
+
+  const displayError = error || walletError;
 
   const toggleAuthMode = () => {
     setIsSignUp(!isSignUp);
@@ -122,11 +122,18 @@ const AuthCard = () => {
           <button
             onClick={handleWalletConnect}
             disabled={isWalletLoading || isLoading}
-            className="w-full flex items-center justify-center gap-2 bg-slate-50 hover:bg-slate-100 text-slate-700 font-medium py-3 px-4 rounded-xl border border-slate-200 transition-colors duration-200 cursor-pointer"
+            className="w-full flex items-center justify-center gap-2 bg-slate-50 hover:bg-slate-100 text-slate-700 font-medium py-3 px-4 rounded-xl border border-slate-200 transition-colors duration-200 cursor-pointer disabled:opacity-60"
           >
             <Wallet className="w-5 h-5 text-slate-500" />
-            {isWalletLoading ? 'Connecting Hardware Vault...' : 'Connect Hardware Vault / Wallet'}
+            {walletConnected ? 'Wallet Connected — Continue' : isWalletLoading ? 'Connecting Hardware Vault...' : 'Connect Hardware Vault / Wallet'}
           </button>
+
+          {walletError && (
+            <p className="text-xs text-red-600 font-medium mt-2 flex items-start gap-1.5">
+              <span>⚠️</span>
+              <span>{walletError}</span>
+            </p>
+          )}
 
           <div className="relative flex py-6 items-center">
             <div className="flex-grow border-t border-slate-200"></div>
@@ -137,13 +144,13 @@ const AuthCard = () => {
       )}
 
       <form onSubmit={handleAuth} className="space-y-4">
-        {error && (
-          <div className="p-3 bg-red-50 border border-red-100 text-red-600 text-xs rounded-lg flex items-start gap-2">
+        {displayError && (
+          <div className="p-3 bg-red-50 border border-red-100 text-red-600 text-sm rounded-lg flex items-start gap-2">
             <span className="mt-0.5">⚠️</span>
-            <p>{error}</p>
+            <p>{displayError}</p>
           </div>
         )}
-        
+
         {isSignUp && (
           <div className="space-y-1">
             <label className="text-sm font-semibold text-slate-700" htmlFor="employeeId">
@@ -252,7 +259,7 @@ const AuthCard = () => {
           <span>Zero-Trust Decentralized Identity (DID)</span>
         </div>
       </div>
-      
+
       <div className="mt-6 text-center border-t border-slate-100 pt-6">
         <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
           Authorized BEL personnel only
