@@ -1,37 +1,58 @@
-import { Request, Response } from 'express';
-import { usersService } from './users.service';
-import { ApiResponse } from '../../shared/utils/response';
+import { Request, Response, NextFunction } from 'express';
+import { successResponse, errorResponse } from '../../utils/response';
+import { prisma } from '../../database';
 
 export class UsersController {
-  public listUsers = async (req: Request, res: Response): Promise<void> => {
-    const { users, total, page, limit } = await usersService.listUsers(req.query);
-    ApiResponse.paginated(res, users, page, limit, total, 'Users retrieved successfully');
-  };
+  async getMe(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = (req as any).user?.userId; // Set by auth middleware
+      if (!userId) {
+        return res.status(401).json(errorResponse('Unauthorized'));
+      }
 
-  public getUserById = async (req: Request, res: Response): Promise<void> => {
-    const user = await usersService.getUserById(req.params.id);
-    ApiResponse.success(res, user, 'User details retrieved');
-  };
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true, email: true, firstName: true, lastName: true, isActive: true,
+          role: { select: { name: true } }
+        }
+      });
 
-  public createUser = async (req: Request, res: Response): Promise<void> => {
-    const user = await usersService.createUser(req.body);
-    ApiResponse.created(res, user, 'User identity created successfully');
-  };
+      if (!user) return res.status(404).json(errorResponse('User not found'));
+      res.json(successResponse(user));
+    } catch (error) {
+      next(error);
+    }
+  }
 
-  public updateUser = async (req: Request, res: Response): Promise<void> => {
-    const user = await usersService.updateUser(req.params.id, req.body);
-    ApiResponse.success(res, user, 'User updated successfully');
-  };
+  async updateProfile(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = (req as any).user?.userId;
+      const { firstName, lastName } = req.body;
 
-  public assignRole = async (req: Request, res: Response): Promise<void> => {
-    const result = await usersService.assignRole(req.params.id, req.body.role);
-    ApiResponse.success(res, result, 'Role assigned successfully');
-  };
+      const user = await prisma.user.update({
+        where: { id: userId },
+        data: { firstName, lastName },
+        select: { id: true, email: true, firstName: true, lastName: true }
+      });
 
-  public deleteUser = async (req: Request, res: Response): Promise<void> => {
-    const result = await usersService.deleteUser(req.params.id);
-    ApiResponse.success(res, result, 'User identity revoked');
-  };
+      res.json(successResponse(user, 'Profile updated successfully'));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async getAllUsers(req: Request, res: Response, next: NextFunction) {
+    try {
+      const users = await prisma.user.findMany({
+        select: {
+          id: true, email: true, firstName: true, lastName: true, isActive: true,
+          role: { select: { name: true } }, createdAt: true
+        }
+      });
+      res.json(successResponse(users));
+    } catch (error) {
+      next(error);
+    }
+  }
 }
-
-export const usersController = new UsersController();

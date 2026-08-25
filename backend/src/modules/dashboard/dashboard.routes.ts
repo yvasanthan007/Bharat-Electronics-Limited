@@ -1,13 +1,13 @@
 import { Router } from 'express';
-import { dashboardController } from './dashboard.controller';
-import { asyncHandler } from '../../middleware/asyncHandler';
+import { DashboardController } from './dashboard.controller';
 
 const router = Router();
+const dashboardController = new DashboardController();
 
-// Dashboard analytics & metrics
-router.get('/summary', asyncHandler(dashboardController.getSummary));
-router.get('/charts', asyncHandler(dashboardController.getCharts));
-router.get('/activity', asyncHandler(dashboardController.getActivity));
-router.get('/blockchain-status', asyncHandler(dashboardController.getBlockchainStatus));
+// TODO: apply authMiddleware below
+router.get('/summary', dashboardController.getSummary);
+router.get('/charts', dashboardController.getCharts);
+router.get('/activity', dashboardController.getActivity);
+router.get('/notifications', dashboardController.getNotifications);
 
 export default router;

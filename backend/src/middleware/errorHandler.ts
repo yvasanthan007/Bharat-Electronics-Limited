@@ -1,48 +1,30 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError } from '../shared/errors/AppError';
-import { ApiResponse } from '../shared/utils/response';
-import { logger } from '../config/logger';
-import { config } from '../config/environment';
+import { ZodError } from 'zod';
+import { errorResponse } from '../utils/response';
+import { logger } from '../utils/logger';
 
 export const errorHandler = (
   err: any,
   req: Request,
   res: Response,
-  _next: NextFunction
-): void => {
-  let statusCode = err.statusCode || 500;
-  let message = err.message || 'Internal server error';
-  let errors = err.errors || undefined;
+  next: NextFunction
+) => {
+  logger.error(`Error processing request ${req.method} ${req.url}:`, {
+    error: err.message,
+    stack: err.stack,
+  });
 
-  // Log error details
-  if (statusCode >= 500) {
-    logger.error('Unhandled Server Error', {
-      message: err.message,
-      stack: err.stack,
-      path: req.path,
-      method: req.method,
-      body: req.body,
-    });
-  } else {
-    logger.warn('Client Request Error', {
-      statusCode,
-      message,
-      path: req.path,
-      method: req.method,
-    });
+  if (err instanceof ZodError) {
+    return res.status(400).json(errorResponse('Validation Error', err.issues));
   }
 
-  // Handle Syntax Error in JSON Body
-  if (err instanceof SyntaxError && 'body' in err) {
-    statusCode = 400;
-    message = 'Invalid JSON syntax in request body';
+  // Handle specific known errors (like Prisma issues, etc)
+  if (err.statusCode) {
+    return res.status(err.statusCode).json(errorResponse(err.message));
   }
 
-  // Obscure internal error messages in production
-  if (config.isProduction && statusCode === 500 && !(err instanceof AppError)) {
-    message = 'An unexpected internal error occurred';
-    errors = undefined;
-  }
-
-  ApiResponse.error(res, message, statusCode, errors);
+  // Fallback to 500
+  return res
+    .status(500)
+    .json(errorResponse('Internal Server Error'));
 };

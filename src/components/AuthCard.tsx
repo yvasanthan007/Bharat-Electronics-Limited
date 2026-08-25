@@ -26,52 +26,98 @@ const AuthCard = () => {
 
     const cleanId = identifier.trim().toLowerCase();
 
-    // 1. Direct BEL Admin credentials check
+    // 1. Try backend API first
+    try {
+      const response = await fetch('http://localhost:4000/api/v1/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: cleanId || employeeId, password }),
+      });
+      const data = await response.json();
+
+      if (data.success && data.data?.token) {
+        localStorage.setItem('accessToken', data.data.token);
+        localStorage.setItem('refreshToken', data.data.refreshToken);
+
+        // Fetch profile
+        const profileRes = await fetch('http://localhost:4000/api/v1/users/me', {
+          headers: {
+            'Authorization': `Bearer ${data.data.token}`
+          }
+        });
+        const profileData = await profileRes.json();
+        
+        if (profileData.success) {
+          localStorage.setItem('user', JSON.stringify(profileData.data));
+          if (profileData.data?.role?.name !== 'ADMIN') {
+            setIsLoading(false);
+            navigate('/user');
+            return;
+          }
+        }
+
+        setIsLoading(false);
+        navigate('/bel');
+        return;
+      }
+    } catch (err) {
+      console.log('Backend API down, using fallback auth', err);
+    }
+
+    // 2. Direct BEL Admin / Officer credentials check (including mock backend login fallback)
     const isAdminMatch = 
       (cleanId === 'bel.admin@gmail' || cleanId === 'bel.admin@gmail.com' || cleanId === 'admin') && 
       password === 'beladmin0';
 
     const isLegacyMatch = 
       (cleanId === 'bel001' && password === 'bel123') ||
-      (cleanId === 'rahul.verma@bel.co.in' && password === 'Admin@123');
+      (cleanId === 'rahul.verma@bel.co.in' && password === 'Admin@123') ||
+      (employeeId === 'BEL001' && password === 'bel123');
 
     if (isAdminMatch || isLegacyMatch) {
       setTimeout(() => {
         setIsLoading(false);
-        localStorage.setItem('bel_user', JSON.stringify({
-          name: 'BEL Admin',
-          email: 'bel.admin@gmail',
-          role: 'Administrator',
-          did: 'did:bel:sov:admin01'
+        const mockUser = {
+          name: isAdminMatch ? 'BEL Admin' : 'Rithvik Aadhiran',
+          email: cleanId || 'rahul@bel.com',
+          role: isAdminMatch ? 'Administrator' : 'Officer',
+          did: isAdminMatch ? 'did:bel:sov:admin01' : 'did:bel:sov:rithvik01'
+        };
+        localStorage.setItem('bel_user', JSON.stringify(mockUser));
+        localStorage.setItem('user', JSON.stringify({
+          firstName: isAdminMatch ? 'BEL' : 'Rithvik',
+          lastName: isAdminMatch ? 'Admin' : 'Aadhiran',
+          email: cleanId || 'rahul@bel.com',
+          role: { name: isAdminMatch ? 'ADMIN' : 'OFFICER' }
         }));
         navigate('/bel');
       }, 400);
       return;
     }
 
-    // 2. Firebase Authentication
+    // 3. Firebase Authentication
     try {
       if (isSignUp) {
         // Create user in Firebase Auth
-        const userCredential = await createUserWithEmailAndPassword(auth, cleanId, password);
+        const userCredential = await createUserWithEmailAndPassword(auth, cleanId || employeeId, password);
         const user = userCredential.user;
 
         // Save additional user details in Firestore
         await setDoc(doc(db, 'users', user.uid), {
           employeeId: employeeId,
-          email: cleanId,
+          email: cleanId || employeeId,
           role: 'user',
           createdAt: serverTimestamp()
         });
       } else {
         // Log in user
-        await signInWithEmailAndPassword(auth, cleanId, password);
+        await signInWithEmailAndPassword(auth, cleanId || employeeId, password);
       }
 
       setIsLoading(false);
       localStorage.setItem('bel_user', JSON.stringify({
         name: employeeId || 'BEL Officer',
-        email: cleanId,
+        email: cleanId || employeeId,
         role: 'Officer',
         did: `did:bel:sov:${(employeeId || 'user01').toLowerCase()}`
       }));

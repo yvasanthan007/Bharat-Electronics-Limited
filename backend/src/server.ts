@@ -1,48 +1,34 @@
-import { createApp } from './app';
-import { config } from './config/environment';
-import { logger } from './config/logger';
-import { dbManager } from './database/prisma';
+import app from './app';
+import { env } from './config/env';
+import { logger } from './utils/logger';
+import { prisma } from './database';
 
-const app = createApp();
+const PORT = env.PORT || 4000;
 
-const startServer = async () => {
+async function bootstrap() {
   try {
-    // Check Database connection
-    await dbManager.connect();
+    // Try to connect to DB
+    await prisma.$connect();
+    logger.info('Connected to PostgreSQL Database via Prisma');
 
-    const server = app.listen(config.port, () => {
-      logger.info('====================================================');
-      logger.info(`🛡️  BEL Trust Platform Backend API is RUNNING`);
-      logger.info(`🌐  Port: ${config.port} | Mode: ${config.env}`);
-      logger.info(`📄  API Documentation: http://localhost:${config.port}/api/docs`);
-      logger.info(`⚡  API Endpoint:      http://localhost:${config.port}/api/v1`);
-      logger.info(`🏥  Health Check:      http://localhost:${config.port}/api/v1/health`);
-      logger.info('====================================================');
+    const server = app.listen(PORT, () => {
+      logger.info(`Server listening on port ${PORT} in ${env.NODE_ENV} mode`);
     });
 
-    // Graceful Shutdown Signals
-    const handleShutdown = async (signal: string) => {
-      logger.info(`${signal} signal received. Starting graceful shutdown...`);
-      server.close(async () => {
-        logger.info('HTTP server closed');
-        await dbManager.disconnect();
-        logger.info('Process terminated cleanly');
-        process.exit(0);
-      });
-
-      // Force shutdown if taking too long
-      setTimeout(() => {
-        logger.error('Could not close connections in time, forcefully shutting down');
-        process.exit(1);
-      }, 10000);
+    const shutdown = async () => {
+      logger.info('Shutting down server...');
+      server.close();
+      await prisma.$disconnect();
+      process.exit(0);
     };
 
-    process.on('SIGTERM', () => handleShutdown('SIGTERM'));
-    process.on('SIGINT', () => handleShutdown('SIGINT'));
+    process.on('SIGINT', shutdown);
+    process.on('SIGTERM', shutdown);
+
   } catch (error: any) {
-    logger.error('Failed to start BEL Trust Platform Backend', { error: error.message, stack: error.stack });
+    logger.error('Failed to start server:', error.message);
     process.exit(1);
   }
-};
+}
 
-startServer();
+bootstrap();

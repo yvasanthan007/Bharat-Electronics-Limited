@@ -4,110 +4,149 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
-
-enum UserStatus {
-  ACTIVE
-  INACTIVE
-  SUSPENDED
-  PENDING_VERIFICATION
-}
-
-enum TransactionType {
-  MINT
-  BURN
-  TRANSFER
-  SWAP
-  BUY
-  SELL
-  STAKE
-  UNSTAKE
-  BRIDGE
-  ROLE_ASSIGNMENT
-  ACCESS_APPROVAL
-}
-
-enum TransactionStatus {
-  SUCCESS
-  PENDING
-  FAILED
-  CANCELLED
-}
-
-enum AssetCategory {
-  CRYPTO
-  STABLECOIN
-  NFT_CERTIFICATE
-  TOKENIZED_DEFENSE_HARDWARE
-  TOKENIZED_SECURITIES
-}
-
-enum NotificationType {
-  SECURITY_ALERT
-  ASSET_MINTED
-  TRANSFER_COMPLETE
-  ROLE_CHANGED
-  SYSTEM_STATUS
-  AUDIT_TRIGGER
 }
 
 model User {
-  id                String         @id @default(uuid())
-  email             String         @unique
-  passwordHash      String
-  firstName         String
-  lastName          String
-  did               String?        @unique // Decentralized Identifier: did:bel:...
-  status            UserStatus     @default(ACTIVE)
-  isEmailVerified   Boolean        @default(false)
-  avatar            String?
-  roleId            String
-  role              Role           @relation(fields: [roleId], references: [id])
-  
-  wallets           Wallet[]
-  assets            Asset[]
-  sessions          Session[]
-  refreshTokens     RefreshToken[]
-  notifications     Notification[]
-  auditLogs         AuditLog[]
-  portfolio         Portfolio?
-  
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
-
-  @@index([email])
-  @@index([did])
-  @@index([roleId])
+  id            String         @id @default(uuid())
+  email         String         @unique
+  passwordHash  String
+  firstName     String?
+  lastName      String?
+  isActive      Boolean        @default(true)
+  roleId        String
+  role          Role           @relation(fields: [roleId], references: [id])
+  wallets       Wallet[]
+  notifications Notification[]
+  auditLogs     AuditLog[]
+  refreshTokens RefreshToken[]
+  sessions      Session[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 }
 
 model Role {
-  id          String           @id @default(uuid())
-  name        String           @unique // e.g. "Administrator", "Engineer", "Manager", "Auditor", "User"
-  description String?
+  id          String       @id @default(uuid())
+  name        String       @unique // e.g., 'ADMIN', 'USER'
   users       User[]
-  permissions RolePermission[]
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  permissions Permission[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
 }
 
 model Permission {
-  id          String           @id @default(uuid())
-  name        String           @unique
-  action      String           // "create", "read", "update", "delete", "approve", "mint"
-  resource    String           // "users", "assets", "transactions", "reports", "settings"
-  description String?
-  roles       RolePermission[]
+  id        String   @id @default(uuid())
+  name      String   @unique // e.g., 'manage_users', 'view_dashboard'
+  roles     Role[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
-model RolePermission {
-  id           String     @id @default(uuid())
-  roleId       String
-  permissionId String
-  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
-  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+model Wallet {
+  id           String        @id @default(uuid())
+  userId       String
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  address      String        @unique
+  balance      Float         @default(0.0)
+  currency     String        @default("USD")
+  transactions Transaction[]
+  portfolio    Portfolio?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
 
-  @@unique([roleId, permissionId])
+model Asset {
+  id           String        @id @default(uuid())
+  symbol       String        @unique
+  name         String
+  price        Float
+  marketCap    Float?
+  change24h    Float?
+  portfolioItems PortfolioItem[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+model Transaction {
+  id              String   @id @default(uuid())
+  transactionHash String
+  transactionType String
+  assetSymbol     String
+  assetName       String
+  walletId        String
+  wallet          Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  network         String
+  fromAddress     String
+  toAddress       String
+  amount          Float
+  usdValue        Float
+  transactionFee  Float
+  gasUsed         Float?
+  gasPrice        Float?
+  status          String
+  confirmations   Int      @default(0)
+  blockNumber     Int?
+  timestamp       DateTime
+  memo            String?
+  createdBy       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([transactionHash])
+  @@index([walletId])
+  @@index([status])
+  @@index([timestamp])
+  @@index([network])
+}
+
+model Portfolio {
+  id        String          @id @default(uuid())
+  walletId  String          @unique
+  wallet    Wallet          @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  items     PortfolioItem[]
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+}
+
+model PortfolioItem {
+  id          String    @id @default(uuid())
+  portfolioId String
+  portfolio   Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  assetId     String
+  asset       Asset     @relation(fields: [assetId], references: [id])
+  quantity    Float
+  averageCost Float
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    String
+  details   String?
+  ipAddress String?
+  createdAt DateTime @default(now())
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
 }
 
 model Session {
@@ -115,165 +154,8 @@ model Session {
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   token     String   @unique
-  ipAddress String?
-  userAgent String?
+  details   String?
+  isActive  Boolean  @default(true)
   expiresAt DateTime
-  isRevoked Boolean  @default(false)
   createdAt DateTime @default(now())
-
-  @@index([userId])
-}
-
-model RefreshToken {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  token     String   @unique
-  expiresAt DateTime
-  isRevoked Boolean  @default(false)
-  createdAt DateTime @default(now())
-
-  @@index([userId])
-}
-
-model Wallet {
-  id           String        @id @default(uuid())
-  userId       String
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  address      String        @unique // e.g. "0x7f82...a3b9"
-  label        String?
-  network      String        @default("BEL Sovereign Testnet")
-  chainId      Int           @default(98234)
-  isVerified   Boolean       @default(true)
-  balanceEth   Decimal       @default(0) @db.Decimal(36, 18)
-  type         String        @default("EVM_ENTERPRISE")
-  assets       Asset[]
-  transactions Transaction[]
-  
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-
-  @@index([address])
-  @@index([userId])
-}
-
-model Asset {
-  id                   String        @id @default(uuid())
-  name                 String        // e.g. "BEL Avionics Component NFT #1024"
-  symbol               String        // e.g. "BEL-AV-1024"
-  category             AssetCategory @default(TOKENIZED_DEFENSE_HARDWARE)
-  tokenId              String?       @unique
-  contractAddress      String        // e.g. "0x98b1...44ac"
-  ownerId              String
-  owner                User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  walletId             String?
-  wallet               Wallet?       @relation(fields: [walletId], references: [id])
-  
-  quantity             Decimal       @default(1) @db.Decimal(28, 8)
-  currentPriceUsd      Decimal       @default(0) @db.Decimal(18, 2)
-  buyPriceUsd          Decimal       @default(0) @db.Decimal(18, 2)
-  allocationPercentage Decimal       @default(0) @db.Decimal(5, 2)
-  pnlPercentage        Decimal       @default(0) @db.Decimal(8, 2)
-  marketValueUsd       Decimal       @default(0) @db.Decimal(18, 2)
-  
-  image                String?
-  isFavorite           Boolean       @default(false)
-  blockNumber          BigInt?
-  metadata             Json?
-  
-  transactions         Transaction[]
-  
-  createdAt            DateTime      @default(now())
-  updatedAt            DateTime      @updatedAt
-
-  @@index([ownerId])
-  @@index([category])
-  @@index([contractAddress])
-}
-
-model Transaction {
-  id            String            @id @default(uuid())
-  hash          String            @unique // e.g. "0x43e0...8311"
-  blockNumber   BigInt
-  fromAddress   String
-  toAddress     String
-  
-  assetId       String?
-  asset         Asset?            @relation(fields: [assetId], references: [id])
-  walletId      String?
-  wallet        Wallet?           @relation(fields: [walletId], references: [id])
-  
-  amount        Decimal           @default(0) @db.Decimal(28, 8)
-  usdValue      Decimal           @default(0) @db.Decimal(18, 2)
-  feeEth        Decimal           @default(0) @db.Decimal(28, 18)
-  gasUsed       BigInt            @default(21000)
-  gasPriceGwei  Decimal           @default(20) @db.Decimal(18, 4)
-  
-  type          TransactionType   @default(TRANSFER)
-  status        TransactionStatus @default(SUCCESS)
-  network       String            @default("BEL Sovereign Testnet")
-  
-  timestamp     DateTime          @default(now())
-  memo          String?
-  explorerUrl   String?
-  rawJson       Json?
-  
-  createdAt     DateTime          @default(now())
-
-  @@index([hash])
-  @@index([fromAddress])
-  @@index([toAddress])
-  @@index([status])
-  @@index([type])
-}
-
-model Portfolio {
-  id                   String   @id @default(uuid())
-  userId               String   @unique
-  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  totalValueUsd        Decimal  @default(0) @db.Decimal(18, 2)
-  totalHoldingsCount   Int      @default(0)
-  bestPerformer        String?  // e.g. "BEL Avionics (+24.5%)"
-  worstPerformer       String?  // e.g. "Legacy Sensor (-1.2%)"
-  dayChangePercentage  Decimal  @default(0) @db.Decimal(6, 2)
-  weekChangePercentage Decimal  @default(0) @db.Decimal(6, 2)
-  monthChangePercentage Decimal @default(0) @db.Decimal(6, 2)
-  
-  updatedAt            DateTime @updatedAt
-}
-
-model Notification {
-  id        String           @id @default(uuid())
-  userId    String
-  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  title     String
-  message   String
-  type      NotificationType @default(SYSTEM_STATUS)
-  isRead    Boolean          @default(false)
-  link      String?
-  metadata  Json?
-  createdAt DateTime         @default(now())
-
-  @@index([userId])
-  @@index([isRead])
-}
-
-model AuditLog {
-  id                String   @id @default(uuid())
-  userId            String?
-  user              User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  action            String   // e.g. "ROLE_ASSIGNED", "ASSET_MINTED", "MFA_ENABLED", "KEY_CREATED"
-  entity            String   // e.g. "User", "Asset", "SecurityPolicy"
-  entityId          String?
-  details           String
-  ipAddress         String?
-  status            String   @default("SUCCESS")
-  timestamp         DateTime @default(now())
-  blockHeight       BigInt?
-  cryptographicHash String?  // SHA-256 seal
-
-  @@index([userId])
-  @@index([action])
-  @@index([timestamp])
 }

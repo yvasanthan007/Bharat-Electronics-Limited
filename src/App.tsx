@@ -1,7 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
-
+import UserSidebar from './components/user/UserSidebar';
+import UserHeader from './components/user/UserHeader';
 import Dashboard from './pages/Dashboard';
 import Reports from './pages/Reports';
 import Settings from './pages/Settings';
@@ -12,6 +13,11 @@ import Identities from './pages/Identities';
 import AccessControl from './pages/AccessControl';
 import SmartContracts from './pages/SmartContracts';
 import AuditTrail from './pages/AuditTrail';
+import UserDashboard from './pages/user/UserDashboard';
+import MyIdentity from './pages/user/MyIdentity';
+import MyAssets from './pages/user/MyAssets';
+import RequestAccess from './pages/user/RequestAccess';
+import MyActivity from './pages/user/MyActivity';
 
 const BelLayout = () => (
   <div className="flex h-screen bg-slate-50 overflow-hidden">
@@ -20,6 +26,18 @@ const BelLayout = () => (
     <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
       <Header />
 
+      <main className="flex-1 overflow-y-auto p-6">
+        <Outlet />
+      </main>
+    </div>
+  </div>
+);
+
+const UserLayout = () => (
+  <div className="flex h-screen bg-slate-50 overflow-hidden">
+    <UserSidebar />
+    <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <UserHeader />
       <main className="flex-1 overflow-y-auto p-6">
         <Outlet />
       </main>
@@ -55,6 +73,15 @@ function App() {
               </div>
             }
           />
+        </Route>
+
+        {/* User-facing portal */}
+        <Route path="/user" element={<UserLayout />}>
+          <Route index element={<UserDashboard />} />
+          <Route path="identity" element={<MyIdentity />} />
+          <Route path="assets" element={<MyAssets />} />
+          <Route path="request-access" element={<RequestAccess />} />
+          <Route path="activity" element={<MyActivity />} />
         </Route>
 
         {/* Direct Route Wrappers & Redirects */}

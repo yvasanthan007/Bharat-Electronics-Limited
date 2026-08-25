@@ -1,68 +1,38 @@
-services:
-  backend:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: bel_trust_backend
-    restart: unless-stopped
-    ports:
-      - "5000:5000"
-    environment:
-      - PORT=5000
-      - NODE_ENV=production
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/bel_trust_db?schema=public
-      - REDIS_URL=redis://redis:6379
-      - JWT_SECRET=bel_enterprise_defense_secret_key_2026_super_secure
-      - JWT_REFRESH_SECRET=bel_refresh_secret_key_2026_defense_grade
-      - CORS_ORIGIN=http://localhost:5173,http://localhost:3000
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - bel_network
+version: '3.8'
 
+services:
   postgres:
-    image: postgres:16-alpine
-    container_name: bel_trust_postgres
-    restart: unless-stopped
-    ports:
-      - "5432:5432"
+    image: postgres:15-alpine
+    restart: always
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: bel_trust_db
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: dashboard_db
+    ports:
+      - '5433:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d bel_trust_db"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    networks:
-      - bel_network
 
   redis:
     image: redis:7-alpine
-    container_name: bel_trust_redis
-    restart: unless-stopped
+    restart: always
     ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    networks:
-      - bel_network
+      - '6379:6379'
+
+  backend:
+    build: .
+    restart: always
+    ports:
+      - '4000:4000'
+    environment:
+      - DATABASE_URL=postgresql://user:password@postgres:5432/dashboard_db
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=supersecretjwt
+      - JWT_REFRESH_SECRET=supersecretrefreshjwt
+      - PORT=4000
+    depends_on:
+      - postgres
+      - redis
 
 volumes:
   postgres_data:
-  redis_data:
-
-networks:
-  bel_network:
-    driver: bridge

@@ -1,18 +1,16 @@
-
 import { useNavigate } from 'react-router-dom';
 import { UserPlus, Key, Tag, ArrowRightLeft, FileText, ChevronRight } from 'lucide-react';
 
 const actions = [
-  { name: 'Create Identity', icon: UserPlus, color: 'text-indigo-600', bg: 'bg-indigo-50', path: '/identities' },
-  { name: 'Assign Role', icon: Key, color: 'text-orange-600', bg: 'bg-orange-50', path: '/access-control' },
-  { name: 'Mint Asset (NFT)', icon: Tag, color: 'text-blue-600', bg: 'bg-blue-50', path: '/digital-assets' },
-  { name: 'Transfer Asset', icon: ArrowRightLeft, color: 'text-purple-600', bg: 'bg-purple-50', path: '/digital-assets' },
-  { name: 'View Audit Trail', icon: FileText, color: 'text-emerald-600', bg: 'bg-emerald-50', path: '/audit-trail' }
+  { name: 'Create Identity', icon: UserPlus, color: 'text-indigo-600', bg: 'bg-indigo-50', path: '/bel/identities' },
+  { name: 'Assign Role', icon: Key, color: 'text-orange-600', bg: 'bg-orange-50', path: '/bel/access-control' },
+  { name: 'Mint Asset (NFT)', icon: Tag, color: 'text-blue-600', bg: 'bg-blue-50', path: '/bel/digital-assets' },
+  { name: 'Transfer Asset', icon: ArrowRightLeft, color: 'text-purple-600', bg: 'bg-purple-50', path: '/bel/transactions' },
+  { name: 'View Audit Trail', icon: FileText, color: 'text-emerald-600', bg: 'bg-emerald-50', path: '/bel/audit-trail' }
 ];
 
 export default function QuickActions() {
   const navigate = useNavigate();
-
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-full">
       <div className="p-5 border-b border-slate-100 shrink-0">

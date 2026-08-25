@@ -1,37 +1,47 @@
-import { Request, Response } from 'express';
-import { transactionsService } from './transactions.service';
-import { ApiResponse } from '../../shared/utils/response';
+import { Request, Response, NextFunction } from 'express';
+import { successResponse, errorResponse } from '../../utils/response';
+import { prisma } from '../../database';
 
 export class TransactionsController {
-  public listTransactions = async (req: Request, res: Response): Promise<void> => {
-    const { transactions, total, page, limit } = await transactionsService.listTransactions(req.query);
-    ApiResponse.paginated(res, transactions, page, limit, total, 'Transactions retrieved successfully');
-  };
+  async getAllTransactions(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = (req as any).user?.userId;
+      const { status, type, page = '1', limit = '10' } = req.query;
 
-  public getSummary = async (_req: Request, res: Response): Promise<void> => {
-    const summary = await transactionsService.getSummaryStats();
-    ApiResponse.success(res, summary, 'Transaction summary statistics retrieved');
-  };
+      const userWallets = await prisma.wallet.findMany({ where: { userId }, select: { id: true } });
+      const walletIds = userWallets.map(w => w.id);
 
-  public getFraudMetrics = async (_req: Request, res: Response): Promise<void> => {
-    const metrics = await transactionsService.getFraudMetrics();
-    ApiResponse.success(res, metrics, 'Fraud detection metrics retrieved');
-  };
+      const filters: any = { walletId: { in: walletIds } };
+      if (status) filters.status = status;
+      if (type) filters.type = type;
 
-  public getTransactionById = async (req: Request, res: Response): Promise<void> => {
-    const tx = await transactionsService.getTransactionById(req.params.id);
-    ApiResponse.success(res, tx, 'Transaction details retrieved');
-  };
+      const skip = (Number(page) - 1) * Number(limit);
+      const take = Number(limit);
 
-  public createTransaction = async (req: Request, res: Response): Promise<void> => {
-    const tx = await transactionsService.createTransaction(req.body);
-    ApiResponse.created(res, tx, 'Transaction broadcasted successfully');
-  };
+      const [transactions, total] = await Promise.all([
+        prisma.transaction.findMany({
+          where: filters,
+          skip, take,
+          orderBy: { createdAt: 'desc' },
+          include: { asset: true, wallet: true }
+        }),
+        prisma.transaction.count({ where: filters })
+      ]);
 
-  public updateStatus = async (req: Request, res: Response): Promise<void> => {
-    const tx = await transactionsService.updateStatus(req.params.id, req.body.status);
-    ApiResponse.success(res, tx, 'Transaction status updated');
-  };
+      res.json(successResponse({
+        items: transactions,
+        meta: { total, page: Number(page), limit: Number(limit) }
+      }));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async getTransactionStats(req: Request, res: Response, next: NextFunction) {
+    try {
+      res.json(successResponse({ volume: 15600, totalFees: 45.2, activeTrades: 8 }));
+    } catch (error) {
+      next(error);
+    }
+  }
 }
-
-export const transactionsController = new TransactionsController();

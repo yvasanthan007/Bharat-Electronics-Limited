@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { useWallet } from '../context/WalletContext';
 
 export default function Header() {
+  const navigate = useNavigate();
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -15,8 +16,11 @@ export default function Header() {
   const [walletMenuOpen, setWalletMenuOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  const [userName, setUserName] = useState('Rahul Verma');
+  const [userRole, setUserRole] = useState('Administrator');
+  const [userInitials, setUserInitials] = useState('RV');
+
   const { address, isConnected, isDemo, isConnecting, error: walletError, linkedDID, connect, disconnect } = useWallet();
-  const navigate = useNavigate();
 
   const [notifications, setNotifications] = useState([
     {
@@ -50,7 +54,7 @@ export default function Header() {
   const userMenuRef = useRef<HTMLDivElement>(null);
   const walletMenuRef = useRef<HTMLDivElement>(null);
 
-  // Initialize and synchronize Dark Mode
+  // Initialize and synchronize Dark Mode & User Profile
   useEffect(() => {
     const savedTheme = localStorage.getItem('bel_theme');
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -61,6 +65,28 @@ export default function Header() {
       document.documentElement.classList.add('dark');
     } else {
       document.documentElement.classList.remove('dark');
+    }
+
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+      try {
+        const user = JSON.parse(userStr);
+        setUserName(`${user.firstName} ${user.lastName}`);
+        setUserRole(user.role?.name || user.role || 'User');
+        setUserInitials(`${user.firstName[0] || 'U'}${user.lastName[0] || 'S'}`);
+      } catch (e) {
+        // fallback
+      }
+    } else {
+      const belUserStr = localStorage.getItem('bel_user');
+      if (belUserStr) {
+        try {
+          const user = JSON.parse(belUserStr);
+          setUserName(user.name);
+          setUserRole(user.role);
+          setUserInitials(user.name.split(' ').map((n: string) => n[0]).join(''));
+        } catch (e) {}
+      }
     }
   }, []);
 
@@ -117,6 +143,9 @@ export default function Header() {
 
   const handleSignOut = () => {
     localStorage.removeItem('bel_user');
+    localStorage.removeItem('user');
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
     localStorage.removeItem('bel_access_token');
     navigate('/login');
   };
@@ -387,11 +416,11 @@ export default function Header() {
             className="flex items-center gap-2.5 hover:bg-slate-50 p-1.5 px-2 rounded-xl transition-colors cursor-pointer"
           >
             <div className="w-8 h-8 bg-gradient-to-tr from-blue-600 to-indigo-600 text-white rounded-lg flex items-center justify-center font-bold text-xs shadow-2xs">
-              RV
+              {userInitials}
             </div>
             <div className="text-left hidden sm:block">
-              <p className="text-xs font-bold text-slate-800 leading-tight">Rahul Verma</p>
-              <p className="text-[11px] font-semibold text-blue-600">Administrator</p>
+              <p className="text-xs font-bold text-slate-800 leading-tight">{userName}</p>
+              <p className="text-[11px] font-semibold text-blue-600">{userRole}</p>
             </div>
             <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
           </button>
@@ -400,11 +429,23 @@ export default function Header() {
           {isUserMenuOpen && (
             <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 animate-in fade-in slide-in-from-top-2 duration-150 z-50">
               <div className="px-3.5 py-2 border-b border-slate-100">
-                <p className="text-xs font-bold text-slate-900">Rahul Verma</p>
-                <p className="text-[11px] text-slate-500 font-mono truncate">rahul.verma@bel.co.in</p>
+                <p className="text-xs font-bold text-slate-900">{userName}</p>
+                <p className="text-[11px] text-slate-500 font-mono truncate">{(() => {
+                  try {
+                    return JSON.parse(localStorage.getItem('user') || localStorage.getItem('bel_user') || '{}').email || 'user@bel.co.in';
+                  } catch (e) {
+                    return 'user@bel.co.in';
+                  }
+                })()}</p>
                 <div className="flex items-center gap-1 mt-1 text-[10px] text-emerald-600 font-semibold">
                   <CheckCircle2 className="w-3 h-3" />
-                  DID: did:bel:7f82e391
+                  DID: {(() => {
+                    try {
+                      return JSON.parse(localStorage.getItem('bel_user') || '{}').did || 'did:bel:7f82e391';
+                    } catch (e) {
+                      return 'did:bel:7f82e391';
+                    }
+                  })()}
                 </div>
               </div>
 

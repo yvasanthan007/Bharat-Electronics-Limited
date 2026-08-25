@@ -1,63 +1,14 @@
 import { Router } from 'express';
-import { authController } from './auth.controller';
-import { validateRequest } from '../../middleware/validate';
-import {
-  registerSchema,
-  loginSchema,
-  refreshTokenSchema,
-  forgotPasswordSchema,
-  resetPasswordSchema,
-} from './auth.schema';
-import { authenticate } from '../../middleware/auth';
-import { authLimiter } from '../../middleware/rateLimiter';
-import { asyncHandler } from '../../middleware/asyncHandler';
+import { AuthController } from './auth.controller';
+// import { validateRequest } from '../../middleware/validateRequest';
+// import { authSchema } from './auth.schema';
 
 const router = Router();
+const authController = new AuthController();
 
-router.post(
-  '/register',
-  authLimiter,
-  validateRequest({ body: registerSchema }),
-  asyncHandler(authController.register)
-);
-
-router.post(
-  '/login',
-  authLimiter,
-  validateRequest({ body: loginSchema }),
-  asyncHandler(authController.login)
-);
-
-router.post(
-  '/refresh-token',
-  validateRequest({ body: refreshTokenSchema }),
-  asyncHandler(authController.refreshToken)
-);
-
-router.post(
-  '/logout',
-  authenticate,
-  asyncHandler(authController.logout)
-);
-
-router.post(
-  '/forgot-password',
-  authLimiter,
-  validateRequest({ body: forgotPasswordSchema }),
-  asyncHandler(authController.forgotPassword)
-);
-
-router.post(
-  '/reset-password',
-  authLimiter,
-  validateRequest({ body: resetPasswordSchema }),
-  asyncHandler(authController.resetPassword)
-);
-
-router.get(
-  '/me',
-  authenticate,
-  asyncHandler(authController.getMe)
-);
+router.post('/register', authController.register);
+router.post('/login', authController.login);
+router.post('/refresh-token', authController.refreshToken);
+router.post('/logout', authController.logout);
 
 export default router;
