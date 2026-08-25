@@ -3,12 +3,12 @@ import { initialNotifications } from '../data/managerMockData';
 
 let mockNotifications = [...initialNotifications];
 const listeners = new Set<() => void>();
-const notify = () => listeners.forEach(l => l());
+const _notify = () => listeners.forEach(l => l());
 
 export function useNotifications() {
   const [notifications, setNotifications] = useState<any[]>(mockNotifications);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, _setError] = useState<string | null>(null);
 
   const fetchNotifications = useCallback(async () => {
     setLoading(true);
@@ -28,7 +28,7 @@ export function useNotifications() {
 
   const markAsRead = async (id: string) => {
     mockNotifications = mockNotifications.map(n => n.id === id ? { ...n, read: true } : n);
-    notify();
+    _notify();
     return { success: true };
   };
 

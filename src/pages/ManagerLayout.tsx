@@ -44,7 +44,7 @@ export default function ManagerLayout({ onLogout }: ManagerLayoutProps) {
     if (!request) return;
 
     const res = await updateRequestStatus(id, 'Approved');
-    if (res.error) {
+    if (!res.success) {
       showToast('Failed to approve request', 'error');
     } else {
       showToast('Access request approved successfully');
@@ -62,7 +62,7 @@ export default function ManagerLayout({ onLogout }: ManagerLayoutProps) {
       const request = accessRequests.find((r: any) => r.id === rejectModal.requestId);
       const res = await updateRequestStatus(rejectModal.requestId, 'Rejected');
       
-      if (res.error) {
+      if (!res.success) {
         showToast('Failed to reject request', 'error');
       } else {
         showToast('Access request rejected');

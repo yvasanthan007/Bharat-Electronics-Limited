@@ -112,6 +112,9 @@ export function getDIDAuditEvents(): AuditLogEvent[] {
 const TX_TYPE_MAP: Record<BlockchainEvent['eventType'], Transaction['type']> = {
     DID_CREATED: 'Mint',
     DID_VERIFIED: 'Contract Call',
+    DID_DEACTIVATED: 'Burn',
+    DID_VERIFICATION_SUCCESS: 'Contract Call',
+    DID_VERIFICATION_FAILED: 'Contract Call',
     VC_ISSUED: 'Mint',
     VC_VERIFIED: 'Contract Call',
     VC_REVOKED: 'Burn',
@@ -119,7 +122,7 @@ const TX_TYPE_MAP: Record<BlockchainEvent['eventType'], Transaction['type']> = {
     ACCESS_DENIED: 'Contract Call',
     WALLET_CONNECTED: 'Contract Call',
     EMPLOYEE_LOGIN: 'Contract Call',
-};
+  };
 
 const ASSET_MAP: Record<string, string> = {
     Identity: 'DID',

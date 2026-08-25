@@ -15,11 +15,9 @@ const AuthCard = () => {
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const [loginPhase, setLoginPhase] = useState<LoginPhase>('idle');
-  const [outcome, setOutcome] = useState<OutcomeView | null>(null);
-
+  const [isLoading, setIsLoading] = useState(false);
+  const { isConnecting: isWalletLoading, error: walletError, isConnected: walletConnected, connect: connectWallet } = useWallet();
   const navigate = useNavigate();
-  const { user, role, signIn } = useAuthContext();
 
   const isAdminRole = (roleStr: string): boolean => {
     const r = (roleStr || '').trim().toUpperCase();
@@ -29,17 +27,7 @@ const AuthCard = () => {
   const handleAuth = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
-    setOutcome(null);
-
-    const identifier = emailOrUsername.trim();
-    if (!identifier) {
-      setError('Please enter your email or username.');
-      return;
-    }
-    if (!password) {
-      setError('Please enter your password.');
-      return;
-    }
+    setIsLoading(true);
 
     const cleanId = identifier.trim().toLowerCase();
 
@@ -280,7 +268,7 @@ const AuthCard = () => {
   const toggleAuthMode = () => {
     setIsSignUp(!isSignUp);
     setError('');
-    setOutcome(null);
+    setPassword('');
   };
 
   return (
@@ -289,7 +277,6 @@ const AuthCard = () => {
         <div className="inline-flex items-center justify-center w-12 h-12 bg-blue-50 text-blue-600 rounded-xl mb-3">
           <ShieldCheck className="w-7 h-7" />
         </div>
-
         <h2 className="text-2xl font-bold text-slate-900 tracking-tight">BEL Trust Platform</h2>
         <h3 className="text-sm font-medium text-slate-600 mt-1">
           {isSignUp ? 'Create Defense Personnel Account' : 'Role-Based Access Control (RBAC) Portal'}
@@ -378,15 +365,11 @@ const AuthCard = () => {
           </div>
         )}
 
-      {/* Login Form */}
-      <form onSubmit={handleLogin} className="space-y-4">
-        {/* Username / Email */}
         <div className="space-y-1">
           <label className="text-xs font-bold text-slate-700" htmlFor="identifier">
             Employee ID or Official Email
           </label>
           <div className="relative">
-            <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               id="identifier"
               type="text"
@@ -396,26 +379,26 @@ const AuthCard = () => {
               required
               className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-xs placeholder:text-slate-400"
             />
+            <Mail className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           </div>
         </div>
 
-        {/* Password */}
         <div className="space-y-1">
           <label className="text-xs font-bold text-slate-700" htmlFor="password">
             Password
           </label>
           <div className="relative">
-            <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
+              id="password"
               type="password"
+              placeholder={isSignUp ? "Create a password (min. 6 characters)" : "Enter your password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              disabled={isBusy}
               required
               minLength={6}
               className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-xs placeholder:text-slate-400"
             />
+            <Lock className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           </div>
         </div>
 
@@ -431,7 +414,6 @@ const AuthCard = () => {
           </div>
         )}
 
-        {/* Submit Button */}
         <button
           type="submit"
           disabled={isLoading || isWalletLoading}
@@ -445,7 +427,6 @@ const AuthCard = () => {
               <ArrowRight className="w-3.5 h-3.5" />
             </>
           )}
-          {PHASE_LABELS[loginPhase]}
         </button>
 
         <div className="text-center pt-2">

@@ -3,12 +3,12 @@ import { initialAccessRequests } from '../data/managerMockData';
 
 let mockRequests = [...initialAccessRequests];
 const listeners = new Set<() => void>();
-const notify = () => listeners.forEach(l => l());
+const _notify = () => listeners.forEach(l => l());
 
 export function useAccessRequests() {
   const [requests, setRequests] = useState<any[]>(mockRequests);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, _setError] = useState<string | null>(null);
 
   const fetchRequests = useCallback(async () => {
     setLoading(true);
@@ -26,7 +26,7 @@ export function useAccessRequests() {
 
   const updateRequestStatus = async (id: string, status: 'Approved' | 'Rejected') => {
     mockRequests = mockRequests.map(r => r.id === id ? { ...r, status } : r);
-    notify();
+    _notify();
     return { success: true };
   };
 

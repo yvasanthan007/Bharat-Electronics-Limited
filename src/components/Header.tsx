@@ -68,29 +68,14 @@ export default function Header() {
     }
 
     const userStr = localStorage.getItem('user');
-
     if (userStr) {
       try {
         const user = JSON.parse(userStr);
-
-        const firstName = user.firstName || 'User';
-        const lastName = user.lastName || '';
-
-        setUserName(
-          `${firstName} ${lastName}`.trim()
-        );
-
-        setUserRole(
-          user.role?.name ||
-          user.role ||
-          'User'
-        );
-
-        setUserInitials(
-          `${firstName[0] || 'U'}${lastName[0] || 'S'}`
-        );
-      } catch {
-        // Keep default user information.
+        setUserName(`${user.firstName} ${user.lastName}`);
+        setUserRole(user.role?.name || user.role || 'User');
+        setUserInitials(`${user.firstName[0] || 'U'}${user.lastName[0] || 'S'}`);
+      } catch (e) {
+        // fallback
       }
     } else {
       const belUserStr = localStorage.getItem('bel_user');
@@ -189,9 +174,7 @@ export default function Header() {
       {/* Global Search Bar */}
       <div className="flex-1 flex items-center max-w-2xl relative" ref={searchRef}>
         <div className="relative w-full">
-
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-
           <input
             type="text"
             value={searchQuery}
@@ -268,9 +251,7 @@ export default function Header() {
         {/* Wallet Connect / Status */}
         {!isConnected ? (
           <div className="flex flex-col items-end gap-1">
-
             <button
-              type="button"
               onClick={connect}
               disabled={isConnecting}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs font-semibold rounded-lg transition-colors shadow-xs cursor-pointer"
@@ -283,7 +264,6 @@ export default function Header() {
                 {walletError}
               </span>
             )}
-
           </div>
         ) : (
           <div className="relative" ref={walletMenuRef}>
@@ -298,10 +278,8 @@ export default function Header() {
               <span className={`w-2 h-2 rounded-full ${isDemo ? 'bg-amber-500' : 'bg-emerald-500'}`} />
               <Wallet className="w-3.5 h-3.5 text-slate-600" />
               <span className="font-mono text-xs font-semibold text-slate-700">
-                {address &&
-                  truncateAddress(address)}
+                {address && truncateAddress(address)}
               </span>
-
               {isDemo && (
                 <span className="text-[9px] font-bold uppercase tracking-wide text-amber-700 bg-amber-100 px-1 py-0.2 rounded">
                   Demo
@@ -315,55 +293,35 @@ export default function Header() {
                 <div className="px-4 py-2 border-b border-slate-100">
                   <p className="text-[11px] text-slate-500 mb-1">Connected Wallet</p>
                   <div className="flex items-center gap-2">
-
-                    <code className="font-mono text-xs text-slate-800 break-all flex-1">
-                      {address}
-                    </code>
-
+                    <code className="font-mono text-xs text-slate-800 break-all flex-1">{address}</code>
                     <button
-                      type="button"
                       onClick={copyAddress}
                       className="shrink-0 p-1 text-slate-400 hover:text-blue-600 cursor-pointer"
                       title="Copy address"
                     >
-                      {copied ? (
-                        <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
-                      ) : (
-                        <Copy className="w-3.5 h-3.5" />
-                      )}
+                      {copied ? <CheckCircle2 className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
                     </button>
-
                   </div>
                   <p className="text-[10px] text-slate-400 mt-1.5">
                     {isDemo ? 'Demo mode — ephemeral defense wallet active' : 'Browser Web3 wallet connected'}
                   </p>
-
                 </div>
 
-                {/* Linked DID */}
                 <div className="px-4 py-2 border-b border-slate-100">
                   <p className="text-[11px] text-slate-500 mb-1">Linked DID</p>
                   {linkedDID ? (
                     <div className="flex items-center gap-1.5">
-
                       <Link2 className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-
-                      <code className="font-mono text-xs text-slate-700 truncate">
-                        {linkedDID}
-                      </code>
-
+                      <code className="font-mono text-xs text-slate-700 truncate">{linkedDID}</code>
                     </div>
                   ) : (
                     <p className="text-[11px] text-slate-400 italic">
                       No DID linked yet — generate or link in Identities
                     </p>
                   )}
-
                 </div>
 
-                {/* Disconnect wallet */}
                 <button
-                  type="button"
                   onClick={() => {
                     disconnect();
                     setWalletMenuOpen(false);
@@ -373,10 +331,8 @@ export default function Header() {
                   <LogOut className="w-3.5 h-3.5" />
                   Disconnect Wallet
                 </button>
-
               </div>
             )}
-
           </div>
         )}
 
@@ -547,12 +503,7 @@ export default function Header() {
               </div>
             </div>
           )}
-
         </div>
-<<<<<<< HEAD
-
-=======
->>>>>>> 817b51c8b67faabb1453781a486f85d31c8522b5
       </div>
     </header>
   );
