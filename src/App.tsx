@@ -1,4 +1,10 @@
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  Outlet,
+} from 'react-router-dom';
 
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
@@ -57,26 +63,78 @@ function App() {
     <BrowserRouter>
       <Routes>
 
-        {/* Root */}
-        <Route path="/" element={<Navigate to="/login" replace />} />
+        {/* ================= ROOT ================= */}
 
-        {/* Login */}
-        <Route path="/login" element={<Login />} />
+        <Route
+          path="/"
+          element={<Navigate to="/login" replace />}
+        />
+
+        {/* ================= LOGIN ================= */}
+
+        <Route
+          path="/login"
+          element={<Login />}
+        />
 
         {/* ================= ADMIN / PLATFORM ================= */}
-        <Route path="/bel" element={<BelLayout />}>
-          <Route index element={<Dashboard />} />
 
-          <Route path="digital-assets" element={<DigitalAssets />} />
-          <Route path="transactions" element={<Transactions />} />
-          <Route path="identities" element={<Identities />} />
+        <Route
+          path="/bel"
+          element={<BelLayout />}
+        >
+          <Route
+            index
+            element={<Dashboard />}
+          />
 
-          <Route path="access-control" element={<AccessControl />} />
-          <Route path="smart-contracts" element={<SmartContracts />} />
-          <Route path="audit-trail" element={<AuditTrail />} />
-          <Route path="reports" element={<Reports />} />
-          <Route path="settings" element={<Settings />} />
+          {/* Existing pages */}
+          <Route
+            path="digital-assets"
+            element={<DigitalAssets />}
+          />
 
+          <Route
+            path="transactions"
+            element={<Transactions />}
+          />
+
+          <Route
+            path="identities"
+            element={<Identities />}
+          />
+
+          {/* Access control */}
+          <Route
+            path="access-control"
+            element={<AccessControl />}
+          />
+
+          {/* Reports */}
+          <Route
+            path="reports"
+            element={<Reports />}
+          />
+
+          {/* Settings */}
+          <Route
+            path="settings"
+            element={<Settings />}
+          />
+
+          {/* Smart contracts */}
+          <Route
+            path="smart-contracts"
+            element={<SmartContracts />}
+          />
+
+          {/* Audit trail */}
+          <Route
+            path="audit-trail"
+            element={<AuditTrail />}
+          />
+
+          {/* Unknown admin route */}
           <Route
             path="*"
             element={
@@ -87,14 +145,38 @@ function App() {
           />
         </Route>
 
-        {/* ================= USER / EMPLOYEE PORTAL ================= */}
-        <Route path="/user" element={<UserLayout />}>
-          <Route index element={<UserDashboard />} />
-          <Route path="identity" element={<MyIdentity />} />
-          <Route path="assets" element={<MyAssets />} />
-          <Route path="request-access" element={<RequestAccess />} />
-          <Route path="activity" element={<MyActivity />} />
+        {/* ================= EMPLOYEE / USER PORTAL ================= */}
 
+        <Route
+          path="/user"
+          element={<UserLayout />}
+        >
+          <Route
+            index
+            element={<UserDashboard />}
+          />
+
+          <Route
+            path="identity"
+            element={<MyIdentity />}
+          />
+
+          <Route
+            path="assets"
+            element={<MyAssets />}
+          />
+
+          <Route
+            path="request-access"
+            element={<RequestAccess />}
+          />
+
+          <Route
+            path="activity"
+            element={<MyActivity />}
+          />
+
+          {/* Unknown user route */}
           <Route
             path="*"
             element={
@@ -106,6 +188,7 @@ function App() {
         </Route>
 
         {/* ================= LEGACY REDIRECTS ================= */}
+
         <Route
           path="/dashboard"
           element={<Navigate to="/bel" replace />}
