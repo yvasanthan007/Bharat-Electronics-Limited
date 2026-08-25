@@ -1,13 +1,73 @@
 import { useState, type FormEvent } from 'react';
-import { Wallet, ShieldCheck, Lock, CheckCircle2, ArrowRight, Mail, UserCircle, Shield, User } from 'lucide-react';
+import {
+  ShieldCheck,
+  Lock,
+  CheckCircle2,
+  XCircle,
+  ArrowRight,
+  Mail,
+  UserCircle,
+  Fingerprint,
+  Shield,
+  User,
+} from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useWallet } from '../context/WalletContext';
+import {
+  requestLoginChallengeByDID,
+  completeLoginChallenge,
+  ensureDemoEmployeeRegistered,
+  signChallengeForDID,
+  getDemoEmployeeDID,
+} from '../services/employeeAuth';
 import { auth, db } from '../lib/firebase';
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+
+/** Map Firebase Auth error codes to human-friendly messages. */
+const getFirebaseErrorMessage = (err: unknown): string => {
+  const code = (err as { code?: string })?.code ?? '';
+  switch (code) {
+    case 'auth/invalid-credential':
+    case 'auth/wrong-password':
+    case 'auth/user-not-found':
+      return 'Invalid email or password.';
+    case 'auth/email-already-in-use':
+      return 'An account with this email already exists. Try logging in instead.';
+    case 'auth/weak-password':
+      return 'Password must be at least 6 characters long.';
+    case 'auth/invalid-email':
+      return 'Please enter a valid email address.';
+    case 'auth/too-many-requests':
+      return 'Too many attempts — please wait a moment and try again.';
+    case 'auth/network-request-failed':
+      return 'Network error — check your internet connection and try again.';
+    case 'auth/operation-not-allowed':
+      return 'Email/password sign-in is not enabled in the Firebase console (Authentication → Sign-in method).';
+    case 'auth/invalid-api-key':
+    case 'auth/app-not-authorized':
+      return 'Firebase configuration error — check the VITE_FIREBASE_* values in .env.local.';
+    default: {
+      const msg = err instanceof Error ? err.message : 'Authentication failed. Please try again.';
+      return msg.replace('Firebase: ', '');
+    }
+  }
+};
+
+type DidLoginPhase = 'idle' | 'challenging' | 'signing' | 'verifying' | 'success';
+
+interface StepView { label: string; passed: boolean; detail: string }
+interface OutcomeView { ok: boolean; title: string; message: string; steps: StepView[] }
+
+const PHASE_LABELS: Record<DidLoginPhase, string> = {
+  idle: 'Authenticate DID',
+  challenging: 'Generating one-time challenge…',
+  signing: 'Signing with secure key storage…',
+  verifying: 'Verifying against DID public key…',
+  success: 'Identity proven ✓',
+};
 
 const AuthCard = () => {
   const [isSignUp, setIsSignUp] = useState(false);
@@ -16,8 +76,12 @@ const AuthCard = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const { isConnecting: isWalletLoading, error: walletError, isConnected: walletConnected, connect: connectWallet } = useWallet();
+  const [didInput, setDidInput] = useState('');
+  const [loginPhase, setLoginPhase] = useState<DidLoginPhase>('idle');
+  const [outcome, setOutcome] = useState<OutcomeView | null>(null);
   const navigate = useNavigate();
+
+  const isDidBusy = loginPhase !== 'idle' && loginPhase !== 'success';
 
   const isAdminRole = (roleStr: string): boolean => {
     const r = (roleStr || '').trim().toUpperCase();
@@ -27,9 +91,23 @@ const AuthCard = () => {
   const handleAuth = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
-    setIsLoading(true);
 
-    const cleanId = identifier.trim().toLowerCase();
+    const trimmedId = identifier.trim();
+    const cleanId = trimmedId.toLowerCase();
+    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanId);
+
+    // Firebase Authentication only accepts valid email addresses.
+    if (!isEmail) {
+      if (isSignUp) {
+        setError('Sign-up requires a valid official email address (e.g. name@bel.co.in).');
+        return;
+      }
+      // Non-email IDs (e.g. bel001) are still handled by the preset
+      // credential check below; if nothing matches, Firebase will
+      // report it via auth/invalid-email with a friendly message.
+    }
+
+    setIsLoading(true);
 
     // 1. Try Backend API first if running
     try {
@@ -153,13 +231,19 @@ const AuthCard = () => {
         const userCredential = await createUserWithEmailAndPassword(auth, cleanId || employeeId, password);
         const user = userCredential.user;
 
-        // Save additional user details in Firestore (Default role: 'user')
-        await setDoc(doc(db, 'users', user.uid), {
-          employeeId: employeeId || 'BEL-EMP',
-          email: cleanId || employeeId,
-          role: 'user',
-          createdAt: serverTimestamp()
-        });
+        // Save additional user details in Firestore (default role: 'user').
+        // Non-fatal: if Firestore rules block this write, the auth account
+        // still exists and the user can continue.
+        try {
+          await setDoc(doc(db, 'users', user.uid), {
+            employeeId: employeeId.trim() || 'BEL-EMP',
+            email: cleanId,
+            role: 'user',
+            createdAt: serverTimestamp()
+          });
+        } catch (firestoreErr) {
+          console.warn('Firestore profile write skipped:', firestoreErr);
+        }
 
         setIsLoading(false);
         localStorage.setItem('bel_user', JSON.stringify({
@@ -178,7 +262,7 @@ const AuthCard = () => {
         navigate('/user');
         return;
       } else {
-        // Log in user
+        // Log in administrator
         const userCredential = await signInWithEmailAndPassword(auth, cleanId || employeeId, password);
         const user = userCredential.user;
 
@@ -223,30 +307,69 @@ const AuthCard = () => {
       }
     } catch (err: unknown) {
       setIsLoading(false);
-      const errorMessage = err instanceof Error ? err.message : 'Invalid ID/Email or password.';
-      setError(errorMessage.replace('Firebase: ', ''));
+      setError(getFirebaseErrorMessage(err));
     }
   };
 
-  // Connects Web3 browser wallet
-  const handleWalletConnect = async () => {
+  /**
+   * DID challenge/response authentication:
+   * Employee enters DID → backend generates one-time challenge →
+   * secure key storage signs it → backend verifies the signature →
+   * valid identity is allowed to continue.
+   */
+  const handleDidLogin = async () => {
+    setError('');
+    setOutcome(null);
+
+    const did = didInput.trim();
+    if (!did) {
+      setOutcome({
+        ok: false,
+        title: 'Access denied',
+        message: 'Enter your DID to continue.',
+        steps: [],
+      });
+      return;
+    }
+
+    setLoginPhase('challenging');
     try {
-      await connectWallet();
-      const belUserStr = localStorage.getItem('bel_user');
-      let isAdm = false;
-      if (belUserStr) {
-        try {
-          const u = JSON.parse(belUserStr);
-          isAdm = isAdminRole(u.role);
-        } catch {}
-      }
-      if (isAdm) {
-        navigate('/bel');
+      await ensureDemoEmployeeRegistered();
+
+      const { challenge, nonce } = requestLoginChallengeByDID(did);
+
+      setLoginPhase('signing');
+      const signature = await signChallengeForDID(did, challenge);
+
+      setLoginPhase('verifying');
+      const result = await completeLoginChallenge(nonce, signature);
+
+      if (result.success && result.session) {
+        setLoginPhase('success');
+        setOutcome({
+          ok: true,
+          title: 'Login successful',
+          message: `${result.session.name} · session valid for 8h. Redirecting…`,
+          steps: result.steps,
+        });
+        window.setTimeout(() => navigate('/bel'), 900);
       } else {
-        navigate('/user');
+        setLoginPhase('idle');
+        setOutcome({
+          ok: false,
+          title: 'Access denied',
+          message: result.error ?? 'Verification failed.',
+          steps: result.steps,
+        });
       }
-    } catch {
-      // Error surfaced through wallet context
+    } catch (err: unknown) {
+      setLoginPhase('idle');
+      setOutcome({
+        ok: false,
+        title: 'Access denied',
+        message: err instanceof Error ? err.message : 'Authentication failed.',
+        steps: [],
+      });
     }
   };
 
@@ -263,7 +386,12 @@ const AuthCard = () => {
     }
   };
 
-  const displayError = error || walletError;
+  /** Quick-fill helper for demos/judges. */
+  const fillDemoDid = () => {
+    setDidInput(getDemoEmployeeDID());
+    setOutcome(null);
+    setError('');
+  };
 
   const toggleAuthMode = () => {
     setIsSignUp(!isSignUp);
@@ -313,20 +441,84 @@ const AuthCard = () => {
 
       {!isSignUp && (
         <>
+          {/* Step 1 — Employee enters their DID */}
+          <div className="space-y-1.5">
+            <label className="text-sm font-semibold text-slate-700" htmlFor="did-input">
+              Decentralized Identifier (DID)
+            </label>
+            <div className="relative">
+              <input
+                id="did-input"
+                type="text"
+                value={didInput}
+                onChange={(e) => setDidInput(e.target.value)}
+                placeholder="did:ethr:0x…"
+                autoComplete="off"
+                spellCheck={false}
+                disabled={isDidBusy}
+                className="w-full px-4 py-3 pr-28 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm font-mono placeholder:text-slate-400 disabled:bg-slate-50"
+              />
+              <button
+                type="button"
+                onClick={fillDemoDid}
+                disabled={isDidBusy}
+                title="Fill the pre-provisioned demo employee DID"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded-lg transition-colors disabled:opacity-50"
+              >
+                Use demo DID
+              </button>
+            </div>
+          </div>
+
+          {/* Steps 2-4 — challenge → sign → verify → LOGIN / DENY */}
           <button
-            onClick={handleWalletConnect}
-            disabled={isWalletLoading || isLoading}
-            className="w-full flex items-center justify-center gap-2 bg-slate-50 hover:bg-slate-100 text-slate-700 font-medium py-2.5 px-4 rounded-xl border border-slate-200 transition-colors duration-200 cursor-pointer disabled:opacity-60 text-xs font-bold"
+            onClick={handleDidLogin}
+            disabled={isDidBusy}
+            className="w-full flex items-center justify-center gap-2 mt-3 bg-slate-900 hover:bg-slate-800 text-white font-medium py-3 px-4 rounded-xl transition-all duration-200 disabled:opacity-60"
           >
-            <Wallet className="w-4 h-4 text-slate-500" />
-            {walletConnected ? 'Wallet Connected — Continue' : isWalletLoading ? 'Connecting Hardware Vault...' : 'Connect Hardware Vault / Web3 Wallet'}
+            {isDidBusy ? (
+              <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+              <Fingerprint className="w-5 h-5" />
+            )}
+            {PHASE_LABELS[loginPhase]}
           </button>
 
-          {walletError && (
-            <p className="text-xs text-red-600 font-medium mt-2 flex items-start gap-1.5">
-              <span>⚠️</span>
-              <span>{walletError}</span>
-            </p>
+          {/* Valid? YES → LOGIN · NO → DENY (with step trace) */}
+          {outcome && (
+            <div
+              className={`mt-3 rounded-xl border p-3 ${
+                outcome.ok
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                  : 'bg-red-50 border-red-200 text-red-700'
+              }`}
+            >
+              <p className="font-semibold text-sm flex items-center gap-1.5">
+                {outcome.ok ? (
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                ) : (
+                  <XCircle className="w-4 h-4 shrink-0" />
+                )}
+                {outcome.title}
+              </p>
+              <p className="text-xs mt-0.5">{outcome.message}</p>
+              {outcome.steps.length > 0 && (
+                <ul className="mt-2 space-y-1 border-t border-current/10 pt-2">
+                  {outcome.steps.map((s) => (
+                    <li key={s.label} className="flex items-start gap-1.5 text-[11px] leading-snug">
+                      {s.passed ? (
+                        <CheckCircle2 className="w-3 h-3 mt-0.5 shrink-0 opacity-70" />
+                      ) : (
+                        <XCircle className="w-3 h-3 mt-0.5 shrink-0 opacity-70" />
+                      )}
+                      <span>
+                        <span className="font-semibold">{s.label}</span> — {s.detail}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           )}
 
           <div className="relative flex py-4 items-center">
@@ -338,10 +530,10 @@ const AuthCard = () => {
       )}
 
       <form onSubmit={handleAuth} className="space-y-3.5">
-        {displayError && (
+        {error && (
           <div className="p-3 bg-red-50 border border-red-100 text-red-600 text-xs rounded-xl flex items-start gap-2">
             <span className="mt-0.5">⚠️</span>
-            <p>{displayError}</p>
+            <p>{error}</p>
           </div>
         )}
 
@@ -416,8 +608,8 @@ const AuthCard = () => {
 
         <button
           type="submit"
-          disabled={isLoading || isWalletLoading}
-          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-4 rounded-xl transition-all duration-200 shadow-sm shadow-blue-600/20 flex items-center justify-center gap-2 mt-3 cursor-pointer text-xs disabled:opacity-50"
+          disabled={isLoading || isDidBusy}
+          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-xl transition-all duration-200 shadow-sm shadow-blue-600/20 flex items-center justify-center gap-2 mt-4 disabled:opacity-60"
         >
           {isLoading ? (
             <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
@@ -458,3 +650,4 @@ const AuthCard = () => {
 };
 
 export default AuthCard;
+

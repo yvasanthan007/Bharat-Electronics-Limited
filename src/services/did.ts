@@ -87,6 +87,61 @@ export async function createDIDIdentity(params: {
 }
 
 /**
+ * Registers an externally-provisioned DID identity (e.g. the pre-registered
+ * demo employee used by the challenge/response login). The wallet address and
+ * public key are supplied by the caller instead of being freshly generated.
+ * Idempotent — re-calling with the same address does not duplicate records.
+ */
+export async function registerExternalDIDIdentity(params: {
+  name: string;
+  employeeId: string;
+  department: string;
+  role: string;
+  walletAddress: string; // checksummed
+  publicKey: string;
+}): Promise<DIDIdentity> {
+  const now = new Date().toISOString();
+  const today = now.split('T')[0];
+
+  const identity: DIDIdentity = {
+    id: `did_ext_${params.walletAddress.toLowerCase()}`,
+    name: params.name,
+    did: `did:ethr:${params.walletAddress.substring(0, 6)}...${params.walletAddress.substring(params.walletAddress.length - 4)}`,
+    fullDID: `did:ethr:${params.walletAddress}`,
+    walletAddress: params.walletAddress,
+    publicKey: params.publicKey,
+    role: params.role,
+    department: params.department,
+    status: 'Verified',
+    createdOn: today,
+    createdAt: now,
+    verifiedAt: now,
+    lastActive: 'Just now',
+  };
+
+  const existing = loadStoredDIDs();
+  if (!existing.some((d) => d.id === identity.id)) {
+    existing.push(identity);
+    saveDIDs(existing);
+
+    await recordBlockchainEvent({
+      eventType: 'DID_CREATED',
+      actorDID: identity.fullDID,
+      walletAddress: identity.walletAddress,
+      details: {
+        name: params.name,
+        role: params.role,
+        department: params.department,
+        employeeId: params.employeeId,
+      },
+      verificationResult: 'SUCCESS',
+    });
+  }
+
+  return identity;
+}
+
+/**
  * Resolves a DID to its DID Document.
  */
 export function resolveDID(did: string): DIDDocument | null {

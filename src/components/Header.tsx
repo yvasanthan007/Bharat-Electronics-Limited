@@ -5,6 +5,8 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useWallet } from '../context/WalletContext';
+import { signOut } from 'firebase/auth';
+import { auth } from '../lib/firebase';
 
 export default function Header() {
   const navigate = useNavigate();
@@ -142,6 +144,10 @@ export default function Header() {
   };
 
   const handleSignOut = () => {
+    // Terminate the Firebase Auth session as well (if one exists).
+    signOut(auth).catch(() => {
+      /* no Firebase session — nothing to do */
+    });
     localStorage.removeItem('bel_user');
     localStorage.removeItem('user');
     localStorage.removeItem('accessToken');
