@@ -1,22 +1,36 @@
+import { useState, useEffect } from 'react';
 import { CheckCircle2, Shield, User, Calendar, Hash, Globe, Download } from 'lucide-react';
-
-const identity = {
-  name: 'Rahul Verma',
-  role: 'Engineer',
-  department: 'R&D Systems',
-  employeeId: 'BEL-2024-1024',
-  did: 'did:bel:0x7f82a1b3c9d4e5f6a7b8c9d0e1f2a3b4',
-  status: 'Verified',
-  issuedOn: '15 Jan 2024',
-  validUntil: '14 Jan 2025',
-  credentials: [
-    { name: 'Employee Certificate',    id: 'NFT-1024', date: '15 Jan 2024', status: 'Active' },
-    { name: 'Security Clearance - L2', id: 'NFT-1087', date: '20 Feb 2024', status: 'Active' },
-    { name: 'Project Atlas Access',    id: 'NFT-1132', date: '01 Mar 2024', status: 'Pending' },
-  ],
-};
+import {
+  getUserIdentity, getUserCredentials,
+  type UserIdentity, type Credential,
+} from '../../services/userPortal';
 
 export default function MyIdentity() {
+  const [identity, setIdentity] = useState<UserIdentity | null>(null);
+  const [credentials, setCredentials] = useState<Credential[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      const [id, creds] = await Promise.all([getUserIdentity(), getUserCredentials()]);
+      setIdentity(id);
+      setCredentials(creds);
+      setLoading(false);
+    };
+    load();
+  }, []);
+
+  if (loading || !identity) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  const initials = identity.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+
   return (
     <div className="max-w-3xl mx-auto space-y-6 pb-8">
       <div>
@@ -29,7 +43,7 @@ export default function MyIdentity() {
         <div className="flex items-start justify-between mb-6">
           <div className="flex items-center gap-4">
             <div className="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center text-white font-bold text-xl backdrop-blur-sm border border-white/30">
-              RV
+              {initials}
             </div>
             <div>
               <h3 className="text-lg font-bold">{identity.name}</h3>
@@ -37,9 +51,11 @@ export default function MyIdentity() {
               <p className="text-blue-300 text-xs mt-0.5">ID: {identity.employeeId}</p>
             </div>
           </div>
-          <div className="flex items-center gap-1.5 bg-green-500/20 px-3 py-1 rounded-full border border-green-400/30">
-            <CheckCircle2 className="w-4 h-4 text-green-300" />
-            <span className="text-xs font-semibold text-green-200">{identity.status}</span>
+          <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full border ${
+            identity.status === 'Verified' ? 'bg-green-500/20 border-green-400/30' : 'bg-amber-500/20 border-amber-400/30'
+          }`}>
+            <CheckCircle2 className="w-4 h-4" />
+            <span className="text-xs font-semibold">{identity.status}</span>
           </div>
         </div>
 
@@ -67,10 +83,10 @@ export default function MyIdentity() {
         </div>
         <div className="divide-y divide-slate-50">
           {[
-            { icon: User,     label: 'Full Name',     value: identity.name },
-            { icon: Shield,   label: 'Role',          value: identity.role },
-            { icon: Globe,    label: 'Department',    value: identity.department },
-            { icon: Hash,     label: 'Employee ID',   value: identity.employeeId },
+            { icon: User,     label: 'Full Name',   value: identity.name },
+            { icon: Shield,   label: 'Role',         value: identity.role },
+            { icon: Globe,    label: 'Department',   value: identity.department },
+            { icon: Hash,     label: 'Employee ID',  value: identity.employeeId },
             { icon: Calendar, label: 'Valid Until',   value: identity.validUntil },
           ].map((row) => (
             <div key={row.label} className="flex items-center gap-3 px-5 py-3.5">
@@ -88,7 +104,7 @@ export default function MyIdentity() {
           <h3 className="font-semibold text-slate-800">Verifiable Credentials</h3>
         </div>
         <div className="divide-y divide-slate-50">
-          {identity.credentials.map((cred) => (
+          {credentials.map((cred) => (
             <div key={cred.id} className="flex items-center gap-3 px-5 py-4">
               <div className="w-9 h-9 bg-blue-50 rounded-full flex items-center justify-center shrink-0">
                 <Shield className="w-4 h-4 text-blue-600" />

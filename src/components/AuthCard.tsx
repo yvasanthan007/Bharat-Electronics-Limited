@@ -51,8 +51,8 @@ const AuthCard = () => {
         setIsLoading(false);
         if (employeeId === 'BEL001' && password === 'bel123') {
           localStorage.setItem('user', JSON.stringify({
-            firstName: 'Rahul',
-            lastName: 'Verma',
+            firstName: 'Rithvik',
+            lastName: 'Aadhiran',
             email: 'rahul@bel.com',
             role: { name: 'ADMIN' }
           }));

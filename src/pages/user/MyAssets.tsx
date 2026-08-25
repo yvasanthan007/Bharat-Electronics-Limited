@@ -1,16 +1,9 @@
+import { useState, useEffect } from 'react';
 import { Package, ExternalLink } from 'lucide-react';
-
-const assets = [
-  { id: 'AST-001', name: 'Project Atlas Repository',  type: 'Repository',    issued: '15 Jan 2024', status: 'Active',   nft: 'NFT-2048' },
-  { id: 'AST-002', name: 'R&D Documentation Bundle',  type: 'Document Set',  issued: '20 Feb 2024', status: 'Active',   nft: 'NFT-2049' },
-  { id: 'AST-003', name: 'Security Module License',   type: 'License',       issued: '01 Mar 2024', status: 'Active',   nft: 'NFT-2050' },
-  { id: 'AST-004', name: 'BEL Intranet Portal Access',type: 'Access Token',  issued: '10 Mar 2024', status: 'Active',   nft: 'NFT-2051' },
-  { id: 'AST-005', name: 'CAD Tools Suite',           type: 'Software',      issued: '22 Apr 2024', status: 'Expired',  nft: 'NFT-2052' },
-  { id: 'AST-006', name: 'Classified Data Read Access',type: 'Access Token', issued: '02 May 2024', status: 'Pending',  nft: 'NFT-2053' },
-];
+import { getUserAssets, type UserAsset } from '../../services/userPortal';
 
 const typeBg: Record<string, string> = {
-  Repository:   'bg-blue-50 text-blue-700',
+  Repository:    'bg-blue-50 text-blue-700',
   'Document Set':'bg-purple-50 text-purple-700',
   License:       'bg-emerald-50 text-emerald-700',
   'Access Token':'bg-amber-50 text-amber-700',
@@ -24,6 +17,31 @@ const statusStyle: Record<string, string> = {
 };
 
 export default function MyAssets() {
+  const [assets, setAssets] = useState<UserAsset[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      const data = await getUserAssets();
+      setAssets(data);
+      setLoading(false);
+    };
+    load();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  const activeCount  = assets.filter(a => a.status === 'Active').length;
+  const pendingCount = assets.filter(a => a.status === 'Pending').length;
+  const expiredCount = assets.filter(a => a.status === 'Expired').length;
+
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-8">
       <div className="flex items-center justify-between">
@@ -40,9 +58,9 @@ export default function MyAssets() {
       {/* Summary cards */}
       <div className="grid grid-cols-3 gap-4">
         {[
-          { label: 'Active',  count: assets.filter(a => a.status === 'Active').length,  cls: 'text-green-600' },
-          { label: 'Pending', count: assets.filter(a => a.status === 'Pending').length, cls: 'text-amber-600' },
-          { label: 'Expired', count: assets.filter(a => a.status === 'Expired').length, cls: 'text-red-600' },
+          { label: 'Active',  count: activeCount,  cls: 'text-green-600' },
+          { label: 'Pending', count: pendingCount, cls: 'text-amber-600' },
+          { label: 'Expired', count: expiredCount, cls: 'text-red-600' },
         ].map(s => (
           <div key={s.label} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm text-center">
             <p className={`text-2xl font-bold ${s.cls}`}>{s.count}</p>

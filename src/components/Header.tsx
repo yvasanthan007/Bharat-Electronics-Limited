@@ -5,9 +5,9 @@ import { useNavigate } from 'react-router-dom';
 
 export default function Header() {
   const navigate = useNavigate();
-  const [userName, setUserName] = useState('Rahul Verma');
+  const [userName, setUserName] = useState('Rithvik Aadhiran');
   const [userRole, setUserRole] = useState('Admin');
-  const [userInitials, setUserInitials] = useState('RV');
+  const [userInitials, setUserInitials] = useState('RA');
   const [showDropdown, setShowDropdown] = useState(false);
 
   useEffect(() => {

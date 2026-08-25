@@ -4,9 +4,9 @@ import { useNavigate } from 'react-router-dom';
 
 export default function UserHeader() {
   const navigate = useNavigate();
-  const [userName, setUserName] = useState('Rahul Verma');
+  const [userName, setUserName] = useState('Rithvik Aadhiran');
   const [userRole, setUserRole] = useState('Engineer');
-  const [userInitials, setUserInitials] = useState('RV');
+  const [userInitials, setUserInitials] = useState('RA');
   const [showDropdown, setShowDropdown] = useState(false);
   const [notifCount] = useState(2);
 
@@ -15,8 +15,8 @@ export default function UserHeader() {
     if (userStr) {
       try {
         const user = JSON.parse(userStr);
-        const first = user.firstName || 'Rahul';
-        const last = user.lastName || 'Verma';
+        const first = user.firstName || 'Rithvik';
+        const last = user.lastName || 'Aadhiran';
         setUserName(`${first} ${last}`);
         setUserRole(user.role?.name || user.role || 'Engineer');
         setUserInitials(`${first[0]}${last[0]}`);

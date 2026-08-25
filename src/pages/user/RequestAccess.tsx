@@ -1,21 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { KeyRound, Send, CheckCircle2 } from 'lucide-react';
-
-const resources = [
-  'Project Atlas Repository',
-  'R&D Documentation Bundle',
-  'BEL Intranet Portal',
-  'Classified Data Drive',
-  'CAD Tools Suite',
-  'Security Module License',
-  'HR Management System',
-  'Finance Portal',
-];
-
-const pendingRequests = [
-  { id: 'REQ-001', resource: 'Project Atlas Repository',   submitted: '10 May 2024', status: 'Pending' },
-  { id: 'REQ-002', resource: 'Classified Data Drive',      submitted: '02 May 2024', status: 'Approved' },
-];
+import {
+  getAccessRequests, submitAccessRequest,
+  AVAILABLE_RESOURCES, type AccessRequest,
+} from '../../services/userPortal';
 
 const statusStyle: Record<string, string> = {
   Pending:  'bg-amber-50 text-amber-700 border border-amber-200',
@@ -27,14 +15,43 @@ export default function RequestAccess() {
   const [resource, setResource] = useState('');
   const [reason, setReason] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [requests, setRequests] = useState<AccessRequest[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      const data = await getAccessRequests();
+      setRequests(data);
+      setLoading(false);
+    };
+    load();
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!resource || !reason) return;
-    setSubmitted(true);
-    setResource('');
-    setReason('');
+    setSubmitting(true);
+    const ok = await submitAccessRequest(resource, reason);
+    setSubmitting(false);
+    if (ok) {
+      setSubmitted(true);
+      setResource('');
+      setReason('');
+      // Refresh list
+      const updated = await getAccessRequests();
+      setRequests(updated);
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-3xl mx-auto space-y-6 pb-8">
@@ -57,10 +74,7 @@ export default function RequestAccess() {
             </div>
             <p className="font-semibold text-slate-800">Request Submitted!</p>
             <p className="text-sm text-slate-500">Your access request has been submitted and is awaiting approval.</p>
-            <button
-              onClick={() => setSubmitted(false)}
-              className="mt-2 px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors"
-            >
+            <button onClick={() => setSubmitted(false)} className="mt-2 px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors">
               Submit Another
             </button>
           </div>
@@ -75,7 +89,7 @@ export default function RequestAccess() {
                 required
               >
                 <option value="">Choose a resource...</option>
-                {resources.map((r) => <option key={r} value={r}>{r}</option>)}
+                {AVAILABLE_RESOURCES.map((r) => <option key={r} value={r}>{r}</option>)}
               </select>
             </div>
             <div>
@@ -92,10 +106,15 @@ export default function RequestAccess() {
             <div className="flex justify-end">
               <button
                 type="submit"
-                className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-sm shadow-blue-500/30"
+                disabled={submitting}
+                className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-sm shadow-blue-500/30 disabled:opacity-50"
               >
-                <Send className="w-4 h-4" />
-                Submit Request
+                {submitting ? (
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <Send className="w-4 h-4" />
+                )}
+                {submitting ? 'Submitting...' : 'Submit Request'}
               </button>
             </div>
           </form>
@@ -108,7 +127,9 @@ export default function RequestAccess() {
           <h3 className="font-semibold text-slate-800">My Requests</h3>
         </div>
         <div className="divide-y divide-slate-50">
-          {pendingRequests.map((req) => (
+          {requests.length === 0 ? (
+            <div className="px-5 py-8 text-center text-sm text-slate-400">No requests yet</div>
+          ) : requests.map((req) => (
             <div key={req.id} className="flex items-center gap-4 px-5 py-4">
               <div className="w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center shrink-0">
                 <KeyRound className="w-4 h-4 text-blue-600" />
