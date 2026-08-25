@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.112.4",
     "@types/qrcode": "^1.5.6",
     "ethers": "^6.17.0",
     "firebase": "^12.18.0",

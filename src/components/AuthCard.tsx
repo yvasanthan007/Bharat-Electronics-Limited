@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useState, type FormEvent, useEffect } from 'react';
 import {
   ShieldCheck,
   Lock,
@@ -10,6 +10,7 @@ import {
   Fingerprint,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useAuthContext } from '../contexts/AuthContext';
 
 import {
   requestLoginChallengeByDID,
@@ -20,14 +21,20 @@ import {
 } from '../services/employeeAuth';
 
 import { auth, db } from '../lib/firebase';
+
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
 } from 'firebase/auth';
 
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import {
+  doc,
+  setDoc,
+  serverTimestamp,
+} from 'firebase/firestore';
 
-// Email/password authentication is restricted to the platform administrator.
+// Email/password authentication is restricted to the
+// platform administrator.
 // Employees authenticate exclusively through the DID wallet flow.
 const ADMIN_EMAIL = (
   import.meta.env.VITE_ADMIN_EMAIL ?? 'admin@bel.in'
@@ -63,13 +70,16 @@ const PHASE_LABELS: Record<DidLoginPhase, string> = {
 
 const AuthCard = () => {
   const [isSignUp, setIsSignUp] = useState(false);
+
   const [employeeId, setEmployeeId] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   const [didInput, setDidInput] = useState('');
+
   const [loginPhase, setLoginPhase] =
     useState<DidLoginPhase>('idle');
 
@@ -78,33 +88,79 @@ const AuthCard = () => {
 
   const navigate = useNavigate();
 
+  /*
+   * Authentication context
+   *
+   * If the application already has an authenticated user,
+   * redirect according to the user's role.
+   */
+  const { user, role } = useAuthContext();
+
+  useEffect(() => {
+    if (!user || !role) {
+      return;
+    }
+
+    if (role === 'Manager') {
+      navigate('/manager', { replace: true });
+    } else {
+      navigate('/bel', { replace: true });
+    }
+  }, [user, role, navigate]);
+
+  /*
+   * DID authentication is busy while the challenge/signing/
+   * verification process is running.
+   */
   const isDidBusy =
-    loginPhase !== 'idle' && loginPhase !== 'success';
+    loginPhase !== 'idle' &&
+    loginPhase !== 'success';
 
   /**
    * ADMIN AUTHENTICATION
    *
    * Sign-up:
-   *   Firebase Auth → Firestore → /bel
+   *   Firebase Auth
+   *       ↓
+   *   Firestore
    *
    * Login:
-   *   Firebase Auth → /bel
+   *   Firebase Auth
+   *       ↓
+   *   /bel
    *
    * Employees are blocked from this flow and must use DID.
    */
   const handleAuth = async (e: FormEvent) => {
     e.preventDefault();
+
     setError('');
     setOutcome(null);
 
-    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedEmail =
+      email.trim().toLowerCase();
 
-    // Administrator gate.
-    // Employees must use DID authentication.
+    /*
+     * Administrator gate.
+     *
+     * Only the configured administrator email is
+     * allowed to use email/password authentication.
+     */
     if (normalizedEmail !== ADMIN_EMAIL) {
       setError(
         'Access restricted — administrator credentials required. Employees must sign in with their DID wallet.'
       );
+
+      return;
+    }
+
+    if (!password.trim()) {
+      setError('Password is required.');
+      return;
+    }
+
+    if (isSignUp && !employeeId.trim()) {
+      setError('Employee ID is required.');
       return;
     }
 
@@ -112,7 +168,9 @@ const AuthCard = () => {
 
     try {
       if (isSignUp) {
-        // Create administrator account in Firebase Auth.
+        /*
+         * Create administrator account in Firebase Authentication.
+         */
         const userCredential =
           await createUserWithEmailAndPassword(
             auth,
@@ -120,17 +178,35 @@ const AuthCard = () => {
             password
           );
 
-        const user = userCredential.user;
+        const firebaseUser =
+          userCredential.user;
 
-        // Store administrator profile in Firestore.
-        await setDoc(doc(db, 'users', user.uid), {
-          employeeId: employeeId.trim(),
-          email: normalizedEmail,
-          role: 'admin',
-          createdAt: serverTimestamp(),
-        });
+        /*
+         * Store administrator profile in Firestore.
+         */
+        await setDoc(
+          doc(
+            db,
+            'users',
+            firebaseUser.uid
+          ),
+          {
+            employeeId:
+              employeeId.trim(),
+
+            email:
+              normalizedEmail,
+
+            role: 'admin',
+
+            createdAt:
+              serverTimestamp(),
+          }
+        );
       } else {
-        // Administrator login.
+        /*
+         * Administrator login.
+         */
         await signInWithEmailAndPassword(
           auth,
           normalizedEmail,
@@ -139,16 +215,28 @@ const AuthCard = () => {
       }
 
       setIsLoading(false);
-      navigate('/bel');
-    } catch (err: any) {
+
+      /*
+       * AuthContext/Firebase listener can update the
+       * application state. The fallback redirect ensures
+       * the administrator reaches the workspace.
+       */
+      navigate('/bel', {
+        replace: true,
+      });
+    } catch (err: unknown) {
       setIsLoading(false);
 
       const errorMessage =
-        err?.message ||
-        'An error occurred during authentication.';
+        err instanceof Error
+          ? err.message
+          : 'An error occurred during authentication.';
 
       setError(
-        errorMessage.replace('Firebase: ', '')
+        errorMessage.replace(
+          'Firebase: ',
+          ''
+        )
       );
     }
   };
@@ -157,27 +245,30 @@ const AuthCard = () => {
    * DID CHALLENGE / RESPONSE AUTHENTICATION
    *
    * Employee:
+   *
    *   DID
    *    ↓
-   * Backend generates challenge
+   *   Backend generates challenge
    *    ↓
-   * Wallet signs challenge
+   *   Wallet signs challenge
    *    ↓
-   * Backend verifies signature
+   *   Backend verifies signature
    *    ↓
-   * LOGIN / DENY
+   *   LOGIN / DENY
    */
   const handleDidLogin = async () => {
     setError('');
     setOutcome(null);
 
-    const did = didInput.trim();
+    const did =
+      didInput.trim();
 
     if (!did) {
       setOutcome({
         ok: false,
         title: 'Access denied',
-        message: 'Enter your DID to continue.',
+        message:
+          'Enter your DID to continue.',
         steps: [],
       });
 
@@ -185,19 +276,36 @@ const AuthCard = () => {
     }
 
     try {
-      // Step 1:
-      // Make sure the demo employee exists.
-      setLoginPhase('challenging');
+      /*
+       * STEP 1
+       *
+       * Make sure the demo employee exists.
+       */
+      setLoginPhase(
+        'challenging'
+      );
 
       await ensureDemoEmployeeRegistered();
 
-      // Generate one-time challenge.
-      const { challenge, nonce } =
-        requestLoginChallengeByDID(did);
+      /*
+       * Generate a one-time challenge.
+       */
+      const {
+        challenge,
+        nonce,
+      } =
+        requestLoginChallengeByDID(
+          did
+        );
 
-      // Step 2:
-      // Employee wallet signs the challenge.
-      setLoginPhase('signing');
+      /*
+       * STEP 2
+       *
+       * Employee wallet signs the challenge.
+       */
+      setLoginPhase(
+        'signing'
+      );
 
       const signature =
         await signChallengeForDID(
@@ -205,9 +313,14 @@ const AuthCard = () => {
           challenge
         );
 
-      // Step 3:
-      // Verify signature against DID public key.
-      setLoginPhase('verifying');
+      /*
+       * STEP 3
+       *
+       * Verify signature against the DID public key.
+       */
+      setLoginPhase(
+        'verifying'
+      );
 
       const result =
         await completeLoginChallenge(
@@ -215,58 +328,100 @@ const AuthCard = () => {
           signature
         );
 
-      if (result.success && result.session) {
-        // Valid DID → LOGIN
-        setLoginPhase('success');
+      /*
+       * DID authentication successful.
+       */
+      if (
+        result.success &&
+        result.session
+      ) {
+        setLoginPhase(
+          'success'
+        );
 
         setOutcome({
           ok: true,
-          title: 'Login successful',
-          message: `${result.session.name} · session valid for 8h. Redirecting…`,
-          steps: result.steps,
-        });
+          title:
+            'Login successful',
 
-        window.setTimeout(() => {
-          navigate('/bel');
-        }, 900);
-      } else {
-        // Invalid DID/signature → DENY
-        setLoginPhase('idle');
-
-        setOutcome({
-          ok: false,
-          title: 'Access denied',
           message:
-            result.error ??
-            'Verification failed.',
-          steps: result.steps,
+            `${result.session.name} · session valid for 8h. Redirecting…`,
+
+          steps:
+            result.steps,
         });
+
+        window.setTimeout(
+          () => {
+            navigate('/bel', {
+              replace: true,
+            });
+          },
+          900
+        );
+
+        return;
       }
-    } catch (err: any) {
+
+      /*
+       * DID authentication failed.
+       */
       setLoginPhase('idle');
 
       setOutcome({
         ok: false,
-        title: 'Access denied',
+        title:
+          'Access denied',
+
         message:
-          err?.message ??
-          'Authentication failed.',
+          result.error ??
+          'Verification failed.',
+
+        steps:
+          result.steps,
+      });
+    } catch (err: unknown) {
+      setLoginPhase('idle');
+
+      const errorMessage =
+        err instanceof Error
+          ? err.message
+          : 'Authentication failed.';
+
+      setOutcome({
+        ok: false,
+        title:
+          'Access denied',
+
+        message:
+          errorMessage,
+
         steps: [],
       });
     }
   };
 
   /**
-   * Demo DID helper.
+   * Fill the pre-provisioned demo employee DID.
    */
   const fillDemoDid = () => {
-    setDidInput(getDemoEmployeeDID());
+    setDidInput(
+      getDemoEmployeeDID()
+    );
+
     setOutcome(null);
     setError('');
   };
 
+  /**
+   * Switch between administrator login
+   * and administrator registration.
+   */
   const toggleAuthMode = () => {
-    setIsSignUp(!isSignUp);
+    setIsSignUp(
+      (previous) => !previous
+    );
+
     setError('');
     setPassword('');
     setOutcome(null);
@@ -316,7 +471,9 @@ const AuthCard = () => {
                 type="text"
                 value={didInput}
                 onChange={(e) =>
-                  setDidInput(e.target.value)
+                  setDidInput(
+                    e.target.value
+                  )
                 }
                 placeholder="did:ethr:0x…"
                 autoComplete="off"
@@ -327,7 +484,9 @@ const AuthCard = () => {
 
               <button
                 type="button"
-                onClick={fillDemoDid}
+                onClick={
+                  fillDemoDid
+                }
                 disabled={isDidBusy}
                 title="Fill the pre-provisioned demo employee DID"
                 className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded-lg transition-colors disabled:opacity-50"
@@ -339,7 +498,9 @@ const AuthCard = () => {
 
           <button
             type="button"
-            onClick={handleDidLogin}
+            onClick={
+              handleDidLogin
+            }
             disabled={isDidBusy}
             className="w-full flex items-center justify-center gap-2 mt-3 bg-slate-900 hover:bg-slate-800 text-white font-medium py-3 px-4 rounded-xl transition-all duration-200 disabled:opacity-60"
           >
@@ -349,7 +510,11 @@ const AuthCard = () => {
               <Fingerprint className="w-5 h-5" />
             )}
 
-            {PHASE_LABELS[loginPhase]}
+            {
+              PHASE_LABELS[
+                loginPhase
+              ]
+            }
           </button>
 
           {/* DID RESULT */}
@@ -375,27 +540,37 @@ const AuthCard = () => {
                 {outcome.message}
               </p>
 
-              {outcome.steps.length > 0 && (
+              {outcome.steps.length >
+                0 && (
                 <ul className="mt-2 space-y-1 border-t border-current/10 pt-2">
-                  {outcome.steps.map((s) => (
-                    <li
-                      key={s.label}
-                      className="flex items-start gap-1.5 text-[11px] leading-snug"
-                    >
-                      {s.passed ? (
-                        <CheckCircle2 className="w-3 h-3 mt-0.5 shrink-0 opacity-70" />
-                      ) : (
-                        <XCircle className="w-3 h-3 mt-0.5 shrink-0 opacity-70" />
-                      )}
+                  {outcome.steps.map(
+                    (step) => (
+                      <li
+                        key={
+                          step.label
+                        }
+                        className="flex items-start gap-1.5 text-[11px] leading-snug"
+                      >
+                        {step.passed ? (
+                          <CheckCircle2 className="w-3 h-3 mt-0.5 shrink-0 opacity-70" />
+                        ) : (
+                          <XCircle className="w-3 h-3 mt-0.5 shrink-0 opacity-70" />
+                        )}
 
-                      <span>
-                        <span className="font-semibold">
-                          {s.label}
-                        </span>{' '}
-                        — {s.detail}
-                      </span>
-                    </li>
-                  ))}
+                        <span>
+                          <span className="font-semibold">
+                            {
+                              step.label
+                            }
+                          </span>{' '}
+                          —{' '}
+                          {
+                            step.detail
+                          }
+                        </span>
+                      </li>
+                    )
+                  )}
                 </ul>
               )}
             </div>
@@ -421,12 +596,15 @@ const AuthCard = () => {
       >
         {error && (
           <div className="p-3 bg-red-50 border border-red-100 text-red-600 text-sm rounded-lg flex items-start gap-2">
-            <span className="mt-0.5">⚠️</span>
+            <span className="mt-0.5">
+              ⚠️
+            </span>
+
             <p>{error}</p>
           </div>
         )}
 
-        {/* Employee ID — Admin registration only */}
+        {/* Employee ID */}
         {isSignUp && (
           <div className="space-y-1">
             <label
@@ -441,11 +619,17 @@ const AuthCard = () => {
                 id="employeeId"
                 type="text"
                 placeholder="e.g. BEL001"
-                value={employeeId}
-                onChange={(e) =>
-                  setEmployeeId(e.target.value)
+                value={
+                  employeeId
                 }
-                required={isSignUp}
+                onChange={(e) =>
+                  setEmployeeId(
+                    e.target.value
+                  )
+                }
+                required={
+                  isSignUp
+                }
                 className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm placeholder:text-slate-400"
               />
 
@@ -470,7 +654,9 @@ const AuthCard = () => {
               placeholder="Enter your email"
               value={email}
               onChange={(e) =>
-                setEmail(e.target.value)
+                setEmail(
+                  e.target.value
+                )
               }
               required
               className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm placeholder:text-slate-400"
@@ -498,9 +684,13 @@ const AuthCard = () => {
                   ? 'Create a password (min. 6 characters)'
                   : 'Enter your password'
               }
-              value={password}
+              value={
+                password
+              }
               onChange={(e) =>
-                setPassword(e.target.value)
+                setPassword(
+                  e.target.value
+                )
               }
               required
               minLength={6}
@@ -537,7 +727,10 @@ const AuthCard = () => {
         {/* Submit */}
         <button
           type="submit"
-          disabled={isLoading || isDidBusy}
+          disabled={
+            isLoading ||
+            isDidBusy
+          }
           className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-xl transition-all duration-200 shadow-sm shadow-blue-600/20 flex items-center justify-center gap-2 mt-4 disabled:opacity-60"
         >
           {isLoading ? (
@@ -562,10 +755,14 @@ const AuthCard = () => {
 
             <button
               type="button"
-              onClick={toggleAuthMode}
+              onClick={
+                toggleAuthMode
+              }
               className="text-blue-600 font-semibold hover:text-blue-700 transition-colors"
             >
-              {isSignUp ? 'Log In' : 'Sign Up'}
+              {isSignUp
+                ? 'Log In'
+                : 'Sign Up'}
             </button>
           </p>
         </div>
@@ -575,15 +772,20 @@ const AuthCard = () => {
       <div className="mt-6 space-y-2">
         <div className="flex items-center justify-center gap-1.5 text-xs text-slate-500">
           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-          <span>Encrypted connection</span>
+          <span>
+            Encrypted connection
+          </span>
         </div>
 
         <div className="flex items-center justify-center gap-1.5 text-xs text-slate-500">
           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-          <span>Identity verification enabled</span>
+          <span>
+            Identity verification enabled
+          </span>
         </div>
       </div>
 
+      {/* Authorized personnel */}
       <div className="mt-6 text-center border-t border-slate-100 pt-6">
         <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
           Authorized BEL personnel only
