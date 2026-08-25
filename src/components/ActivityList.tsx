@@ -1,4 +1,5 @@
 
+import { useNavigate } from 'react-router-dom';
 import * as Icons from 'lucide-react';
 
 interface Activity {
@@ -16,11 +17,16 @@ interface ActivityListProps {
 }
 
 export default function ActivityList({ activities }: ActivityListProps) {
+  const navigate = useNavigate();
+
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col h-full">
       <div className="p-5 border-b border-slate-100 flex justify-between items-center shrink-0">
         <h3 className="text-base font-semibold text-slate-900">Recent Activities</h3>
-        <button className="text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors">
+        <button 
+          onClick={() => navigate('/audit-trail')}
+          className="text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors"
+        >
           View all
         </button>
       </div>

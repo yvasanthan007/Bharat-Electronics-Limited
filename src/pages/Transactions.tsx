@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Download, FileText, Link, UploadCloud } from 'lucide-react';
 import { getTransactions, getTransactionSummary, type Transaction, type TransactionSummaryData } from '../services/transactions';
+import { getDIDTransactions } from '../lib/did/eventMappers';
 import TransactionSummary from '../components/transactions/TransactionSummary';
 import TransactionFilters from '../components/transactions/TransactionFilters';
 import TransactionsTable from '../components/transactions/TransactionsTable';
@@ -15,11 +16,16 @@ export default function Transactions() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [txData, sumData] = await Promise.all([
+        const [txData, sumData, didTx] = await Promise.all([
           getTransactions(),
           getTransactionSummary(),
+          Promise.resolve(getDIDTransactions()),
         ]);
-        setTransactions(txData);
+        // Merge live DID/blockchain events with wallet transactions (newest first)
+        const merged = [...didTx, ...txData].sort(
+          (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+        );
+        setTransactions(merged);
         setSummary(sumData);
       } catch (error) {
         console.error("Failed to fetch transactions:", error);
@@ -62,7 +68,7 @@ export default function Transactions() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Transactions</h1>
-          <p className="text-slate-500 text-sm mt-1">Track every transaction across your wallets.</p>
+          <p className="text-slate-500 text-sm mt-1">Track every transaction across your wallets — including DID, credential and access-control events.</p>
         </div>
         <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
           <button className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-medium rounded-lg transition-colors text-sm">
