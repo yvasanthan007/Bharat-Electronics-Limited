@@ -1,5 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, User, Package, KeyRound, Clock, LogOut, Shield } from 'lucide-react';
+import { signOut } from 'firebase/auth';
+import { auth } from '../../lib/firebase';
 
 const navItems = [
   { name: 'Dashboard',      path: '/user',              icon: LayoutDashboard, end: true },
@@ -13,6 +15,10 @@ export default function UserSidebar() {
   const navigate = useNavigate();
 
   const handleLogout = () => {
+    // Terminate the Firebase Auth session as well (if one exists).
+    signOut(auth).catch(() => {
+      /* no Firebase session — nothing to do */
+    });
     localStorage.removeItem('user');
     localStorage.removeItem('bel_user');
     localStorage.removeItem('accessToken');

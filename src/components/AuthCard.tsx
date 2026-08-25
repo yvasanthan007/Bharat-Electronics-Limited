@@ -1,6 +1,5 @@
 import { useState, type FormEvent } from 'react';
 import {
-  Wallet,
   ShieldCheck,
   Lock,
   CheckCircle2,
@@ -27,9 +26,35 @@ import {
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 
-// Email/password sign-in is restricted to the platform administrator.
-// Employees authenticate exclusively through the DID wallet flow below.
-const ADMIN_EMAIL = (import.meta.env.VITE_ADMIN_EMAIL ?? 'admin@bel.in').toLowerCase();
+/** Map Firebase Auth error codes to human-friendly messages. */
+const getFirebaseErrorMessage = (err: unknown): string => {
+  const code = (err as { code?: string })?.code ?? '';
+  switch (code) {
+    case 'auth/invalid-credential':
+    case 'auth/wrong-password':
+    case 'auth/user-not-found':
+      return 'Invalid email or password.';
+    case 'auth/email-already-in-use':
+      return 'An account with this email already exists. Try logging in instead.';
+    case 'auth/weak-password':
+      return 'Password must be at least 6 characters long.';
+    case 'auth/invalid-email':
+      return 'Please enter a valid email address.';
+    case 'auth/too-many-requests':
+      return 'Too many attempts — please wait a moment and try again.';
+    case 'auth/network-request-failed':
+      return 'Network error — check your internet connection and try again.';
+    case 'auth/operation-not-allowed':
+      return 'Email/password sign-in is not enabled in the Firebase console (Authentication → Sign-in method).';
+    case 'auth/invalid-api-key':
+    case 'auth/app-not-authorized':
+      return 'Firebase configuration error — check the VITE_FIREBASE_* values in .env.local.';
+    default: {
+      const msg = err instanceof Error ? err.message : 'Authentication failed. Please try again.';
+      return msg.replace('Firebase: ', '');
+    }
+  }
+};
 
 type DidLoginPhase = 'idle' | 'challenging' | 'signing' | 'verifying' | 'success';
 
@@ -67,17 +92,22 @@ const AuthCard = () => {
     e.preventDefault();
     setError('');
 
-    // Administrator gate — other identities are refused before touching Firebase.
-    if (identifier.trim().toLowerCase() !== ADMIN_EMAIL) {
-      setError(
-        'Access restricted — administrator credentials required. Employees must sign in with their DID wallet.'
-      );
-      return;
+    const trimmedId = identifier.trim();
+    const cleanId = trimmedId.toLowerCase();
+    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanId);
+
+    // Firebase Authentication only accepts valid email addresses.
+    if (!isEmail) {
+      if (isSignUp) {
+        setError('Sign-up requires a valid official email address (e.g. name@bel.co.in).');
+        return;
+      }
+      // Non-email IDs (e.g. bel001) are still handled by the preset
+      // credential check below; if nothing matches, Firebase will
+      // report it via auth/invalid-email with a friendly message.
     }
 
     setIsLoading(true);
-
-    const cleanId = identifier.trim().toLowerCase();
 
     // 1. Try Backend API first if running
     try {
@@ -201,13 +231,19 @@ const AuthCard = () => {
         const userCredential = await createUserWithEmailAndPassword(auth, cleanId || employeeId, password);
         const user = userCredential.user;
 
-        // Save additional user details in Firestore (Default role: 'user')
-        await setDoc(doc(db, 'users', user.uid), {
-          employeeId: employeeId || 'BEL-EMP',
-          email: cleanId || employeeId,
-          role: 'user',
-          createdAt: serverTimestamp()
-        });
+        // Save additional user details in Firestore (default role: 'user').
+        // Non-fatal: if Firestore rules block this write, the auth account
+        // still exists and the user can continue.
+        try {
+          await setDoc(doc(db, 'users', user.uid), {
+            employeeId: employeeId.trim() || 'BEL-EMP',
+            email: cleanId,
+            role: 'user',
+            createdAt: serverTimestamp()
+          });
+        } catch (firestoreErr) {
+          console.warn('Firestore profile write skipped:', firestoreErr);
+        }
 
         setIsLoading(false);
         localStorage.setItem('bel_user', JSON.stringify({
@@ -271,8 +307,7 @@ const AuthCard = () => {
       }
     } catch (err: unknown) {
       setIsLoading(false);
-      const errorMessage = err instanceof Error ? err.message : 'Invalid ID/Email or password.';
-      setError(errorMessage.replace('Firebase: ', ''));
+      setError(getFirebaseErrorMessage(err));
     }
   };
 
@@ -574,7 +609,7 @@ const AuthCard = () => {
         <button
           type="submit"
           disabled={isLoading || isDidBusy}
-          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-xl transition-all duration-200 shadow-sm shadow-blue-600/20 flex items-center justify-center gap-2 mt-4 disabled:opacity-60
+          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-xl transition-all duration-200 shadow-sm shadow-blue-600/20 flex items-center justify-center gap-2 mt-4 disabled:opacity-60"
         >
           {isLoading ? (
             <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>

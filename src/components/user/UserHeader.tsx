@@ -1,6 +1,8 @@
 import { Bell, ChevronDown, Menu, Shield, LogOut, LayoutDashboard } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { signOut } from 'firebase/auth';
+import { auth } from '../../lib/firebase';
 
 export default function UserHeader() {
   const navigate = useNavigate();
@@ -71,6 +73,10 @@ export default function UserHeader() {
   }, []);
 
   const handleLogout = () => {
+    // Terminate the Firebase Auth session as well (if one exists).
+    signOut(auth).catch(() => {
+      /* no Firebase session — nothing to do */
+    });
     localStorage.removeItem('user');
     localStorage.removeItem('bel_user');
     localStorage.removeItem('accessToken');
