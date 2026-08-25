@@ -1,13 +1,4 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
-<<<<<<< HEAD
-import {
-  Download,
-  RotateCw,
-  ChevronLeft,
-  ChevronRight,
-  CheckCircle2,
-  AlertCircle,
-=======
 import { 
   Download, 
   RotateCw, 
@@ -15,7 +6,6 @@ import {
   ChevronRight, 
   CheckCircle2,
   AlertCircle
->>>>>>> 817b51c8b67faabb1453781a486f85d31c8522b5
 } from 'lucide-react';
 
 import StatCard from '../components/StatCard';
@@ -23,9 +13,6 @@ import AuditFilterBar from '../components/audit/AuditFilterBar';
 import AuditTable from '../components/audit/AuditTable';
 import AuditDetailsDrawer from '../components/audit/AuditDetailsDrawer';
 import ExportLogsModal from '../components/audit/ExportLogsModal';
-<<<<<<< HEAD
-
-=======
 >>>>>>> 817b51c8b67faabb1453781a486f85d31c8522b5
 import { type AuditLogEvent } from '../data/auditData';
 
@@ -38,7 +25,6 @@ import {
 <<<<<<< HEAD
 =======
 import { getDIDAuditEvents } from '../lib/did/eventMappers';
->>>>>>> 817b51c8b67faabb1453781a486f85d31c8522b5
 
 export default function AuditTrail() {
   // ============================================================
@@ -118,12 +104,6 @@ export default function AuditTrail() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-<<<<<<< HEAD
-  // ============================================================
-  // ACTIVE FILTER COUNT
-  // ============================================================
-
-=======
 >>>>>>> 817b51c8b67faabb1453781a486f85d31c8522b5
   const activeFilterCount = useMemo(() => {
     let count = 0;
@@ -200,7 +180,6 @@ export default function AuditTrail() {
     selectedResourceType,
     selectedStatus,
     selectedNetwork,
->>>>>>> 817b51c8b67faabb1453781a486f85d31c8522b5
     selectedDateRange,
   ]);
 
@@ -287,22 +266,7 @@ export default function AuditTrail() {
 
   useEffect(() => {
     const unsubscribe = subscribeToAuditLogs(() => {
-<<<<<<< HEAD
-      // Refresh statistics when a new event is detected.
-      getAuditStatistics()
-        .then(setStats)
-        .catch((err) => {
-          console.error(
-            'Failed to refresh audit statistics:',
-            err
-          );
-        });
-
-      // Refresh currently displayed audit events.
-      loadAuditData(true);
-=======
       getAuditStatistics().then(setStats).catch(() => {});
->>>>>>> 817b51c8b67faabb1453781a486f85d31c8522b5
     });
 
     return () => unsubscribe();
@@ -331,30 +295,9 @@ export default function AuditTrail() {
     loadAuditData(true);
   };
 
-<<<<<<< HEAD
-  // ============================================================
-  // PAGINATION
-  // ============================================================
-
-  const totalPages = Math.max(
-    1,
-    Math.ceil(
-      totalFilteredCount / pageSize
-    )
-  );
-
-  // ============================================================
-  // SELECT EVENT
-  // ============================================================
-
-  const handleSelectEvent = (
-    event: AuditLogEvent
-  ) => {
-=======
   const totalPages = Math.max(1, Math.ceil(totalFilteredCount / pageSize));
 
   const handleSelectEvent = (event: AuditLogEvent) => {
->>>>>>> 817b51c8b67faabb1453781a486f85d31c8522b5
     setSelectedEvent(event);
     setIsDrawerOpen(true);
   };
@@ -543,13 +486,8 @@ export default function AuditTrail() {
         <div className="flex items-center gap-3">
 
           <span>
-<<<<<<< HEAD
-            Showing{' '}
-
-=======
             Showing <strong className="font-semibold text-slate-900">{totalFilteredCount > 0 ? (currentPage - 1) * pageSize + 1 : 0}</strong>–
             <strong className="font-semibold text-slate-900">{Math.min(currentPage * pageSize, totalFilteredCount)}</strong> of{' '}
->>>>>>> 817b51c8b67faabb1453781a486f85d31c8522b5
             <strong className="font-semibold text-slate-900">
               {totalFilteredCount > 0
                 ? (currentPage - 1) * pageSize + 1
@@ -573,14 +511,7 @@ export default function AuditTrail() {
               totalTotalCount
                 ? `${totalFilteredCount} filtered (${totalTotalCount} total)`
                 : `${totalTotalCount}`}
-<<<<<<< HEAD
-
-            </strong>
-
-            {' '}events
-=======
             </strong> events
->>>>>>> 817b51c8b67faabb1453781a486f85d31c8522b5
           </span>
 
           {/* Rows per page */}
