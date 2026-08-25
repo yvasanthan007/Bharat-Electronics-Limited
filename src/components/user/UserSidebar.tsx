@@ -14,8 +14,10 @@ export default function UserSidebar() {
 
   const handleLogout = () => {
     localStorage.removeItem('user');
+    localStorage.removeItem('bel_user');
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
+    localStorage.removeItem('bel_access_token');
     navigate('/login');
   };
 

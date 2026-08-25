@@ -480,6 +480,16 @@ export default function Header() {
                   <Settings className="w-4 h-4 text-slate-400" />
                   Node Settings
                 </button>
+                <button
+                  onClick={() => {
+                    navigate('/user');
+                    setIsUserMenuOpen(false);
+                  }}
+                  className="w-full px-3.5 py-2 text-left text-xs font-bold text-blue-600 hover:bg-blue-50 flex items-center gap-2.5 cursor-pointer border-t border-slate-100"
+                >
+                  <Shield className="w-4 h-4 text-blue-600" />
+                  Switch to User Portal
+                </button>
               </div>
 
               <div className="pt-1 border-t border-slate-100">

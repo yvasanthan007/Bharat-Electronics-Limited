@@ -1,3 +1,4 @@
+import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
@@ -18,6 +19,72 @@ import MyIdentity from './pages/user/MyIdentity';
 import MyAssets from './pages/user/MyAssets';
 import RequestAccess from './pages/user/RequestAccess';
 import MyActivity from './pages/user/MyActivity';
+
+// Helper to check current authenticated role
+const getAuthUserRole = (): { isAuthenticated: boolean; isAdmin: boolean } => {
+  try {
+    const belUserStr = localStorage.getItem('bel_user');
+    const userStr = localStorage.getItem('user');
+
+    if (!belUserStr && !userStr) {
+      return { isAuthenticated: false, isAdmin: false };
+    }
+
+    let role = '';
+    if (belUserStr) {
+      const u = JSON.parse(belUserStr);
+      role = u.role || '';
+    } else if (userStr) {
+      const u = JSON.parse(userStr);
+      role = u.role?.name || u.role || '';
+    }
+
+    const r = role.trim().toUpperCase();
+    const isAdmin = r === 'ADMIN' || r === 'ADMINISTRATOR' || r === 'SECURITY OFFICER';
+
+    return { isAuthenticated: true, isAdmin };
+  } catch {
+    return { isAuthenticated: false, isAdmin: false };
+  }
+};
+
+// Guard for Admin Routes (/bel/*)
+const AdminRoute = ({ children }: { children: React.ReactNode }) => {
+  const { isAuthenticated, isAdmin } = getAuthUserRole();
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (!isAdmin) {
+    // If regular user tries to access admin panel, redirect to User portal
+    return <Navigate to="/user" replace />;
+  }
+
+  return <>{children}</>;
+};
+
+// Guard for User Portal Routes (/user/*)
+const UserRoute = ({ children }: { children: React.ReactNode }) => {
+  const { isAuthenticated } = getAuthUserRole();
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <>{children}</>;
+};
+
+// Root route intelligent redirector
+const RootRedirect = () => {
+  const { isAuthenticated, isAdmin } = getAuthUserRole();
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <Navigate to={isAdmin ? '/bel' : '/user'} replace />;
+};
 
 const BelLayout = () => (
   <div className="flex h-screen bg-slate-50 overflow-hidden">
@@ -50,11 +117,18 @@ function App() {
     <BrowserRouter>
       <Routes>
         {/* Entry / Login */}
-        <Route path="/" element={<Navigate to="/login" replace />} />
+        <Route path="/" element={<RootRedirect />} />
         <Route path="/login" element={<Login />} />
 
-        {/* Main BEL Application under /bel */}
-        <Route path="/bel" element={<BelLayout />}>
+        {/* Admin Application under /bel with AdminRoute guard */}
+        <Route
+          path="/bel"
+          element={
+            <AdminRoute>
+              <BelLayout />
+            </AdminRoute>
+          }
+        >
           <Route index element={<Dashboard />} />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="digital-assets" element={<DigitalAssets />} />
@@ -75,16 +149,25 @@ function App() {
           />
         </Route>
 
-        {/* User-facing portal */}
-        <Route path="/user" element={<UserLayout />}>
+        {/* User-facing portal under /user with UserRoute guard */}
+        <Route
+          path="/user"
+          element={
+            <UserRoute>
+              <UserLayout />
+            </UserRoute>
+          }
+        >
           <Route index element={<UserDashboard />} />
+          <Route path="dashboard" element={<UserDashboard />} />
           <Route path="identity" element={<MyIdentity />} />
           <Route path="assets" element={<MyAssets />} />
           <Route path="request-access" element={<RequestAccess />} />
           <Route path="activity" element={<MyActivity />} />
         </Route>
 
-        {/* Direct Route Wrappers & Redirects */}
+        {/* Aliases & Direct Redirects */}
+        <Route path="/user-dashboard" element={<Navigate to="/user" replace />} />
         <Route path="/dashboard" element={<Navigate to="/bel/dashboard" replace />} />
         <Route path="/digital-assets" element={<Navigate to="/bel/digital-assets" replace />} />
         <Route path="/transactions" element={<Navigate to="/bel/transactions" replace />} />
@@ -94,11 +177,9 @@ function App() {
         <Route path="/settings" element={<Navigate to="/bel/settings" replace />} />
         <Route path="/audit-trail" element={<Navigate to="/bel/audit-trail" replace />} />
         <Route path="/smart-contracts" element={<Navigate to="/bel/smart-contracts" replace />} />
-        <Route path="/dashboard/reports" element={<Navigate to="/bel/reports" replace />} />
-        <Route path="/dashboard/settings" element={<Navigate to="/bel/settings" replace />} />
 
         {/* Fallback */}
-        <Route path="*" element={<Navigate to="/bel" replace />} />
+        <Route path="*" element={<RootRedirect />} />
       </Routes>
     </BrowserRouter>
   );
