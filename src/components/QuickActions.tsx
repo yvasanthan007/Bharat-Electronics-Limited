@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+<<<<<<< HEAD
 import {
   UserPlus,
   Key,
@@ -44,11 +45,24 @@ const actions = [
     bg: 'bg-emerald-50',
     path: '/bel/audit-trail',
   },
+=======
+import { UserPlus, Key, Tag, ArrowRightLeft, FileText, ChevronRight } from 'lucide-react';
+
+const actions = [
+  { name: 'Create Identity', icon: UserPlus, color: 'text-indigo-600', bg: 'bg-indigo-50', path: '/bel/identities' },
+  { name: 'Assign Role', icon: Key, color: 'text-orange-600', bg: 'bg-orange-50', path: '/bel/access-control' },
+  { name: 'Mint Asset (NFT)', icon: Tag, color: 'text-blue-600', bg: 'bg-blue-50', path: '/bel/digital-assets' },
+  { name: 'Transfer Asset', icon: ArrowRightLeft, color: 'text-purple-600', bg: 'bg-purple-50', path: '/bel/transactions' },
+  { name: 'View Audit Trail', icon: FileText, color: 'text-emerald-600', bg: 'bg-emerald-50', path: '/bel/audit-trail' }
+>>>>>>> 817b51c8b67faabb1453781a486f85d31c8522b5
 ];
 
 export default function QuickActions() {
   const navigate = useNavigate();
+<<<<<<< HEAD
 
+=======
+>>>>>>> 817b51c8b67faabb1453781a486f85d31c8522b5
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-full">
       <div className="p-5 border-b border-slate-100 shrink-0">
@@ -62,9 +76,13 @@ export default function QuickActions() {
           {actions.map((action, index) => (
             <button
               key={index}
+<<<<<<< HEAD
               onClick={() =>
                 action.path && navigate(action.path)
               }
+=======
+              onClick={() => action.path && navigate(action.path)}
+>>>>>>> 817b51c8b67faabb1453781a486f85d31c8522b5
               className="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors group"
             >
               <div className="flex items-center gap-3">
