@@ -113,6 +113,7 @@ const TX_TYPE_MAP: Record<BlockchainEvent['eventType'], Transaction['type']> = {
     ACCESS_GRANTED: 'Contract Call',
     ACCESS_DENIED: 'Contract Call',
     WALLET_CONNECTED: 'Contract Call',
+    EMPLOYEE_LOGIN: 'Contract Call',
 };
 
 const ASSET_MAP: Record<string, string> = {

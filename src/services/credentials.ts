@@ -28,6 +28,15 @@ function saveVCs(vcs: VerifiableCredential[]): void {
   } catch { }
 }
 
+/** Persists a credential into the local VC store (used by provisioning flows). */
+export function storeCredential(vc: VerifiableCredential): void {
+  const vcs = loadStoredVCs();
+  if (!vcs.some((v) => v.id === vc.id)) {
+    vcs.push(vc);
+    saveVCs(vcs);
+  }
+}
+
 /** Returns all credentials (seed + session) */
 export function getAllCredentials(): VerifiableCredential[] {
   const stored = loadStoredVCs();

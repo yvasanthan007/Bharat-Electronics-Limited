@@ -1,13 +1,45 @@
 import { useState, type FormEvent } from 'react';
-import { Wallet, ShieldCheck, Lock, CheckCircle2, ArrowRight, Mail, UserCircle } from 'lucide-react';
+import {
+  ShieldCheck,
+  Lock,
+  CheckCircle2,
+  XCircle,
+  ArrowRight,
+  Mail,
+  UserCircle,
+  Fingerprint,
+} from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useWallet } from '../context/WalletContext';
+import {
+  requestLoginChallengeByDID,
+  completeLoginChallenge,
+  ensureDemoEmployeeRegistered,
+  signChallengeForDID,
+  getDemoEmployeeDID,
+} from '../services/employeeAuth';
 import { auth, db } from '../lib/firebase';
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword
 } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+
+// Email/password sign-in is restricted to the platform administrator.
+// Employees authenticate exclusively through the DID wallet flow below.
+const ADMIN_EMAIL = (import.meta.env.VITE_ADMIN_EMAIL ?? 'admin@bel.in').toLowerCase();
+
+type DidLoginPhase = 'idle' | 'challenging' | 'signing' | 'verifying' | 'success';
+
+interface StepView { label: string; passed: boolean; detail: string }
+interface OutcomeView { ok: boolean; title: string; message: string; steps: StepView[] }
+
+const PHASE_LABELS: Record<DidLoginPhase, string> = {
+  idle: 'Authenticate DID',
+  challenging: 'Generating one-time challenge…',
+  signing: 'Signing with secure key storage…',
+  verifying: 'Verifying against DID public key…',
+  success: 'Identity proven ✓',
+};
 
 const AuthCard = () => {
   const [isSignUp, setIsSignUp] = useState(false);
@@ -16,12 +48,25 @@ const AuthCard = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const { isConnecting: isWalletLoading, error: walletError, isConnected: walletConnected, connect: connectWallet } = useWallet();
+  const [didInput, setDidInput] = useState('');
+  const [loginPhase, setLoginPhase] = useState<DidLoginPhase>('idle');
+  const [outcome, setOutcome] = useState<OutcomeView | null>(null);
   const navigate = useNavigate();
+
+  const isDidBusy = loginPhase !== 'idle' && loginPhase !== 'success';
 
   const handleAuth = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
+
+    // Administrator gate — other identities are refused before touching Firebase.
+    if (email.trim().toLowerCase() !== ADMIN_EMAIL) {
+      setError(
+        'Access restricted — administrator credentials required. Employees must sign in with their DID wallet.'
+      );
+      return;
+    }
+
     setIsLoading(true);
 
     try {
@@ -34,12 +79,11 @@ const AuthCard = () => {
         await setDoc(doc(db, 'users', user.uid), {
           employeeId: employeeId,
           email: email,
-          role: 'user',
+          role: 'admin',
           createdAt: serverTimestamp()
         });
-
       } else {
-        // Log in user
+        // Log in admin
         await signInWithEmailAndPassword(auth, email, password);
       }
 
@@ -53,18 +97,80 @@ const AuthCard = () => {
     }
   };
 
-  // Connects a real browser wallet (MetaMask) or falls back to an
-  // ephemeral demo wallet when no provider is available.
-  const handleWalletConnect = async () => {
+  /**
+   * DID challenge/response authentication, mirroring the platform flow:
+   *   Employee enters DID → Backend generates one-time challenge →
+   *   Wallet / secure key storage signs it → Backend verifies using the
+   *   DID public key → Valid? LOGIN : DENY.
+   */
+  const handleDidLogin = async () => {
+    setError('');
+    setOutcome(null);
+
+    const did = didInput.trim();
+    if (!did) {
+      setOutcome({
+        ok: false,
+        title: 'Access denied',
+        message: 'Enter your DID to continue.',
+        steps: [],
+      });
+      return;
+    }
+
+    // Step 1 — Backend: resolve DID & generate one-time challenge
+    setLoginPhase('challenging');
     try {
-      await connectWallet();
-      navigate('/bel');
-    } catch {
-      // Error state is surfaced through the wallet context
+      // Guarantees the pre-provisioned demo employee exists so the demo DID resolves.
+      await ensureDemoEmployeeRegistered();
+
+      const { challenge, nonce } = requestLoginChallengeByDID(did);
+
+      // Step 2 — Employee Wallet / Secure Key Storage: sign the challenge
+      setLoginPhase('signing');
+      const signature = await signChallengeForDID(did, challenge);
+
+      // Step 3 — Backend: verify signature against the DID public key
+      setLoginPhase('verifying');
+      const result = await completeLoginChallenge(nonce, signature);
+
+      if (result.success && result.session) {
+        // Valid? YES → LOGIN
+        setLoginPhase('success');
+        setOutcome({
+          ok: true,
+          title: 'Login successful',
+          message: `${result.session.name} · session valid for 8h. Redirecting…`,
+          steps: result.steps,
+        });
+        window.setTimeout(() => navigate('/bel'), 900);
+      } else {
+        // Valid? NO → DENY
+        setLoginPhase('idle');
+        setOutcome({
+          ok: false,
+          title: 'Access denied',
+          message: result.error ?? 'Verification failed.',
+          steps: result.steps,
+        });
+      }
+    } catch (err: any) {
+      setLoginPhase('idle');
+      setOutcome({
+        ok: false,
+        title: 'Access denied',
+        message: err?.message ?? 'Authentication failed.',
+        steps: [],
+      });
     }
   };
 
-  const displayError = error || walletError;
+  /** Quick-fill helper for demos/judges. */
+  const fillDemoDid = () => {
+    setDidInput(getDemoEmployeeDID());
+    setOutcome(null);
+    setError('');
+  };
 
   const toggleAuthMode = () => {
     setIsSignUp(!isSignUp);
@@ -89,20 +195,84 @@ const AuthCard = () => {
 
       {!isSignUp && (
         <>
+          {/* Step 1 — Employee enters their DID */}
+          <div className="space-y-1.5">
+            <label className="text-sm font-semibold text-slate-700" htmlFor="did-input">
+              Decentralized Identifier (DID)
+            </label>
+            <div className="relative">
+              <input
+                id="did-input"
+                type="text"
+                value={didInput}
+                onChange={(e) => setDidInput(e.target.value)}
+                placeholder="did:ethr:0x…"
+                autoComplete="off"
+                spellCheck={false}
+                disabled={isDidBusy}
+                className="w-full px-4 py-3 pr-28 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm font-mono placeholder:text-slate-400 disabled:bg-slate-50"
+              />
+              <button
+                type="button"
+                onClick={fillDemoDid}
+                disabled={isDidBusy}
+                title="Fill the pre-provisioned demo employee DID"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded-lg transition-colors disabled:opacity-50"
+              >
+                Use demo DID
+              </button>
+            </div>
+          </div>
+
+          {/* Steps 2-4 — challenge → sign → verify → LOGIN / DENY */}
           <button
-            onClick={handleWalletConnect}
-            disabled={isWalletLoading || isLoading}
-            className="w-full flex items-center justify-center gap-2 bg-slate-50 hover:bg-slate-100 text-slate-700 font-medium py-3 px-4 rounded-xl border border-slate-200 transition-colors duration-200 disabled:opacity-60"
+            onClick={handleDidLogin}
+            disabled={isDidBusy}
+            className="w-full flex items-center justify-center gap-2 mt-3 bg-slate-900 hover:bg-slate-800 text-white font-medium py-3 px-4 rounded-xl transition-all duration-200 disabled:opacity-60"
           >
-            <Wallet className="w-5 h-5 text-slate-500" />
-            {walletConnected ? 'Wallet Connected — Continue' : isWalletLoading ? 'Connecting...' : 'Connect Wallet'}
+            {isDidBusy ? (
+              <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+              <Fingerprint className="w-5 h-5" />
+            )}
+            {PHASE_LABELS[loginPhase]}
           </button>
 
-          {walletError && (
-            <p className="text-xs text-red-600 font-medium mt-2 flex items-start gap-1.5">
-              <span>⚠️</span>
-              <span>{walletError}</span>
-            </p>
+          {/* Valid? YES → LOGIN · NO → DENY (with step trace) */}
+          {outcome && (
+            <div
+              className={`mt-3 rounded-xl border p-3 ${
+                outcome.ok
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                  : 'bg-red-50 border-red-200 text-red-700'
+              }`}
+            >
+              <p className="font-semibold text-sm flex items-center gap-1.5">
+                {outcome.ok ? (
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                ) : (
+                  <XCircle className="w-4 h-4 shrink-0" />
+                )}
+                {outcome.title}
+              </p>
+              <p className="text-xs mt-0.5">{outcome.message}</p>
+              {outcome.steps.length > 0 && (
+                <ul className="mt-2 space-y-1 border-t border-current/10 pt-2">
+                  {outcome.steps.map((s) => (
+                    <li key={s.label} className="flex items-start gap-1.5 text-[11px] leading-snug">
+                      {s.passed ? (
+                        <CheckCircle2 className="w-3 h-3 mt-0.5 shrink-0 opacity-70" />
+                      ) : (
+                        <XCircle className="w-3 h-3 mt-0.5 shrink-0 opacity-70" />
+                      )}
+                      <span>
+                        <span className="font-semibold">{s.label}</span> — {s.detail}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           )}
 
           <div className="relative flex py-6 items-center">
@@ -114,10 +284,10 @@ const AuthCard = () => {
       )}
 
       <form onSubmit={handleAuth} className="space-y-4">
-        {displayError && (
+        {error && (
           <div className="p-3 bg-red-50 border border-red-100 text-red-600 text-sm rounded-lg flex items-start gap-2">
             <span className="mt-0.5">⚠️</span>
-            <p>{displayError}</p>
+            <p>{error}</p>
           </div>
         )}
 
@@ -192,8 +362,8 @@ const AuthCard = () => {
 
         <button
           type="submit"
-          disabled={isLoading || isWalletLoading}
-          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-xl transition-all duration-200 shadow-sm shadow-blue-600/20 flex items-center justify-center gap-2 mt-4"
+          disabled={isLoading || isDidBusy}
+          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-xl transition-all duration-200 shadow-sm shadow-blue-600/20 flex items-center justify-center gap-2 mt-4 disabled:opacity-60"
         >
           {isLoading ? (
             <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
@@ -240,3 +410,4 @@ const AuthCard = () => {
 };
 
 export default AuthCard;
+
