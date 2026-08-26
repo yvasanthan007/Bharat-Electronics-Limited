@@ -336,7 +336,7 @@ const AuthCard = () => {
     try {
       await ensureDemoEmployeeRegistered();
 
-      const { challenge, nonce } = requestLoginChallengeByDID(did);
+      const { challenge, nonce } = await requestLoginChallengeByDID(did);
 
       setLoginPhase('signing');
       const signature = await signChallengeForDID(did, challenge);

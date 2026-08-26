@@ -1,5 +1,20 @@
 import { ethers } from 'ethers';
 import { recordBlockchainEvent } from '../lib/did/blockchainLayer';
+import {
+    storeWalletKey,
+    hasWalletKey,
+    signChallengeWithWalletKey,
+    getWalletKey,
+    listStoredWallets,
+} from './secureKeyStorage';
+
+export {
+    storeWalletKey,
+    hasWalletKey,
+    signChallengeWithWalletKey,
+    getWalletKey,
+    listStoredWallets,
+};
 
 /**
  * Wallet service — connects browser wallets (MetaMask etc.) via EIP-1193.
@@ -89,7 +104,18 @@ export const DEMO_MNEMONIC =
 let _demoWallet: ethers.HDNodeWallet | null = null;
 
 function getDemoWallet(): ethers.HDNodeWallet {
-    if (!_demoWallet) _demoWallet = ethers.HDNodeWallet.fromPhrase(DEMO_MNEMONIC);
+    if (!_demoWallet) {
+        _demoWallet = ethers.HDNodeWallet.fromPhrase(DEMO_MNEMONIC);
+        // Pre-provision demo key in browser's local secure key vault
+        storeWalletKey({
+            did: `did:ethr:${_demoWallet.address}`,
+            walletAddress: _demoWallet.address,
+            publicKey: _demoWallet.publicKey,
+            privateKey: _demoWallet.privateKey,
+            employeeId: 'BEL100',
+            email: 'ananya.rao@bel.co.in',
+        }).catch(() => {});
+    }
     return _demoWallet;
 }
 

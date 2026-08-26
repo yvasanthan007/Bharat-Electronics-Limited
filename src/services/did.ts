@@ -3,6 +3,8 @@ import type { GeneratedDID, DIDDocument } from '../lib/did/didEngine';
 import { recordBlockchainEvent } from '../lib/did/blockchainLayer';
 import { mockDIDIdentities, type DIDIdentity } from '../data/mockDIDData';
 import { belApi } from './apiClient';
+import { storeWalletKey } from './secureKeyStorage';
+import { saveEmployeeToFirestore } from './firebaseEmployeeService';
 
 const DID_STORAGE_KEY = 'bel_did_identities';
 
@@ -75,7 +77,41 @@ export async function createDIDIdentity(params: {
     lastActive: 'Just now',
   };
 
-  // Try backend API persistence
+  // Store the private key ONLY in the employee's browser wallet
+  if (generated._privateKeyForSigning) {
+    try {
+      await storeWalletKey({
+        did: assignedDid,
+        walletAddress: assignedWallet,
+        publicKey: assignedPubKey,
+        privateKey: generated._privateKeyForSigning,
+        employeeId: params.employeeId,
+        email: params.email,
+      });
+    } catch {
+      // Wallet key store fallback
+    }
+  }
+
+  // Store DID + public key in Firebase Firestore (NEVER with private key)
+  try {
+    await saveEmployeeToFirestore({
+      employeeId: params.employeeId,
+      did: assignedDid,
+      publicKey: assignedPubKey,
+      role: params.role,
+      email: params.email,
+      name: params.name,
+      department: params.department,
+      walletAddress: assignedWallet,
+      status: 'Verified',
+      createdAt: now,
+    });
+  } catch {
+    // Graceful offline fallback
+  }
+
+  // Try backend API persistence (DID + public key only, NO private key)
   try {
     const apiRes = await belApi.did.create({
       name: params.name,
@@ -159,6 +195,23 @@ export async function registerExternalDIDIdentity(params: {
     verifiedAt: now,
     lastActive: 'Just now',
   };
+
+  try {
+    await saveEmployeeToFirestore({
+      employeeId: params.employeeId,
+      did: assignedDid,
+      publicKey: params.publicKey,
+      role: params.role,
+      email: params.email || `${params.name.toLowerCase().replace(/\s+/g, '.')}@bel.co.in`,
+      name: params.name,
+      department: params.department,
+      walletAddress: params.walletAddress,
+      status: 'Verified',
+      createdAt: now,
+    });
+  } catch {
+    // Fallback
+  }
 
   try {
     await belApi.did.create({

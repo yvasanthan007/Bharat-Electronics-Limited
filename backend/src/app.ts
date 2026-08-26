@@ -57,4 +57,6 @@ app.use((req: Request, res: Response) => {
 // Centralized error handler (must be last)
 app.use(errorHandler);
 
+export const createApp = (): Express => app;
+export { app };
 export default app;

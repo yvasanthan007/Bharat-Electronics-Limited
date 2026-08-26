@@ -31,6 +31,7 @@ export interface ChallengeRecord {
   challenge: string;
   issuedAt: number;
   expiresAt: number;
+  used: boolean;
 }
 
 const CHALLENGE_TTL_MS = 5 * 60 * 1000; // 5 minutes
@@ -467,6 +468,7 @@ export class DIDService {
       challenge,
       issuedAt,
       expiresAt,
+      used: false,
     });
 
     await this.recordAudit(
@@ -490,12 +492,18 @@ export class DIDService {
       throw new Error('Challenge not found or already consumed. Please restart the sign-in.');
     }
 
+    if (record.used) {
+      this.challenges.delete(input.nonce);
+      throw new Error('Challenge has already been used. Please restart the sign-in.');
+    }
+
     if (Date.now() > record.expiresAt) {
       this.challenges.delete(input.nonce);
       throw new Error('Login challenge expired. Please restart the sign-in.');
     }
 
-    // Immediately consume nonce to prevent replay attacks
+    // Mark as used immediately to prevent replay attacks
+    record.used = true;
     this.challenges.delete(input.nonce);
 
     // Verify ECDSA signature against challenge
