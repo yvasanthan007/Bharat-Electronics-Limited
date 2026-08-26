@@ -130,7 +130,7 @@ const AuthCard = () => {
             }
           });
           const profileData = await profileRes.json();
-          
+
           if (profileData.success && profileData.data) {
             const userObj = profileData.data;
             const roleName = userObj.role?.name || userObj.role || 'User';
@@ -165,14 +165,14 @@ const AuthCard = () => {
     }
 
     // 2. Direct BEL Credentials check (Admin & User RBAC)
-    const isAdminMatch = 
-      (cleanId === 'bel.admin@gmail' || cleanId === 'bel.admin@gmail.com' || cleanId === 'admin') && 
+    const isAdminMatch =
+      (cleanId === 'bel.admin@gmail' || cleanId === 'bel.admin@gmail.com' || cleanId === 'admin') &&
       password === 'beladmin0';
 
-    const isLegacyAdminMatch = 
+    const isLegacyAdminMatch =
       (cleanId === 'rahul.verma@bel.co.in' && password === 'Admin@123');
 
-    const isUserMatch = 
+    const isUserMatch =
       (cleanId === 'bel001' && password === 'bel123') ||
       (employeeId.toLowerCase() === 'bel001' && password === 'bel123') ||
       (cleanId === 'rithvik@bel.co.in' && password === 'bel123') ||
@@ -352,7 +352,23 @@ const AuthCard = () => {
           message: `${result.session.name} · session valid for 8h. Redirecting…`,
           steps: result.steps,
         });
-        window.setTimeout(() => navigate('/bel'), 900);
+
+        const isAdm = isAdminRole(result.session.role);
+        localStorage.setItem('user', JSON.stringify({
+          firstName: result.session.name.split(' ')[0],
+          lastName: result.session.name.split(' ').slice(1).join(' '),
+          role: { name: isAdm ? 'ADMIN' : result.session.role },
+          did: result.session.did,
+          walletAddress: result.session.walletAddress,
+        }));
+        localStorage.setItem('bel_user', JSON.stringify({
+          name: result.session.name,
+          role: isAdm ? 'Administrator' : result.session.role,
+          did: result.session.did,
+          walletAddress: result.session.walletAddress,
+        }));
+
+        window.setTimeout(() => navigate(isAdm ? '/bel' : '/user'), 900);
       } else {
         setLoginPhase('idle');
         setOutcome({

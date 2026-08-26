@@ -2,6 +2,7 @@ import { generateDID, resolveDIDDocument } from '../lib/did/didEngine';
 import type { GeneratedDID, DIDDocument } from '../lib/did/didEngine';
 import { recordBlockchainEvent } from '../lib/did/blockchainLayer';
 import { mockDIDIdentities, type DIDIdentity } from '../data/mockDIDData';
+import { belApi } from './apiClient';
 
 const DID_STORAGE_KEY = 'bel_did_identities';
 
@@ -44,36 +45,71 @@ export async function createDIDIdentity(params: {
   email: string;
   department: string;
   role: string;
+  did?: string;
+  walletAddress?: string;
+  publicKey?: string;
 }): Promise<{ identity: DIDIdentity; generated: GeneratedDID }> {
   const generated = generateDID();
   const now = new Date().toISOString();
   const today = now.split('T')[0];
 
+  const assignedWallet = params.walletAddress || generated.walletAddress;
+  const assignedPubKey = params.publicKey || generated.publicKey;
+  const assignedDid = params.did || generated.did;
+
   const identity: DIDIdentity = {
     id: `did_${Date.now()}`,
     name: params.name,
-    did: `did:ethr:${generated.walletAddress.substring(0, 6)}...${generated.walletAddress.substring(generated.walletAddress.length - 4)}`,
-    fullDID: generated.did,
-    walletAddress: generated.walletAddress,
-    publicKey: generated.publicKey,
+    did: assignedDid.startsWith('did:') && assignedDid.length > 20
+      ? `${assignedDid.substring(0, 12)}...${assignedDid.substring(assignedDid.length - 4)}`
+      : assignedDid,
+    fullDID: assignedDid,
+    walletAddress: assignedWallet,
+    publicKey: assignedPubKey,
     role: params.role,
     department: params.department,
-    status: 'Pending',
+    status: 'Verified',
     createdOn: today,
     createdAt: now,
+    verifiedAt: now,
     lastActive: 'Just now',
   };
 
+  // Try backend API persistence
+  try {
+    const apiRes = await belApi.did.create({
+      name: params.name,
+      employeeId: params.employeeId,
+      email: params.email,
+      department: params.department,
+      role: params.role,
+      did: assignedDid,
+      walletAddress: assignedWallet,
+      publicKey: assignedPubKey,
+      documentJson: generated.didDocument,
+    });
+    if (apiRes.success && apiRes.data?.identity) {
+      identity.id = apiRes.data.identity.id || identity.id;
+    }
+  } catch {
+    // Graceful offline fallback
+  }
+
   // Save to storage (no private key stored)
   const existing = loadStoredDIDs();
-  existing.push(identity);
+  const existingIdx = existing.findIndex(d => d.fullDID === identity.fullDID || d.walletAddress.toLowerCase() === identity.walletAddress.toLowerCase());
+  if (existingIdx >= 0) {
+    existing[existingIdx] = identity;
+  } else {
+    existing.push(identity);
+  }
   saveDIDs(existing);
 
   // Record on blockchain
   await recordBlockchainEvent({
     eventType: 'DID_CREATED',
-    actorDID: generated.did,
-    walletAddress: generated.walletAddress,
+    actorDID: identity.fullDID,
+    walletAddress: identity.walletAddress,
     details: {
       name: params.name,
       role: params.role,
@@ -99,15 +135,20 @@ export async function registerExternalDIDIdentity(params: {
   role: string;
   walletAddress: string; // checksummed
   publicKey: string;
+  did?: string;
+  email?: string;
 }): Promise<DIDIdentity> {
   const now = new Date().toISOString();
   const today = now.split('T')[0];
+  const assignedDid = params.did || `did:ethr:${params.walletAddress}`;
 
   const identity: DIDIdentity = {
     id: `did_ext_${params.walletAddress.toLowerCase()}`,
     name: params.name,
-    did: `did:ethr:${params.walletAddress.substring(0, 6)}...${params.walletAddress.substring(params.walletAddress.length - 4)}`,
-    fullDID: `did:ethr:${params.walletAddress}`,
+    did: assignedDid.length > 20
+      ? `did:ethr:${params.walletAddress.substring(0, 6)}...${params.walletAddress.substring(params.walletAddress.length - 4)}`
+      : assignedDid,
+    fullDID: assignedDid,
     walletAddress: params.walletAddress,
     publicKey: params.publicKey,
     role: params.role,
@@ -119,8 +160,23 @@ export async function registerExternalDIDIdentity(params: {
     lastActive: 'Just now',
   };
 
+  try {
+    await belApi.did.create({
+      name: params.name,
+      employeeId: params.employeeId,
+      email: params.email || `${params.name.toLowerCase().replace(/\s+/g, '.')}@bel.co.in`,
+      department: params.department,
+      role: params.role,
+      did: assignedDid,
+      walletAddress: params.walletAddress,
+      publicKey: params.publicKey,
+    });
+  } catch {
+    // Fallback
+  }
+
   const existing = loadStoredDIDs();
-  if (!existing.some((d) => d.id === identity.id)) {
+  if (!existing.some((d) => d.id === identity.id || d.fullDID === identity.fullDID)) {
     existing.push(identity);
     saveDIDs(existing);
 

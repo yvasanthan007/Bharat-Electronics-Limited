@@ -47,6 +47,7 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
 
 // API routes
 app.use('/api/v1', router);
+app.use('/api', router);
 
 // 404 handler
 app.use((req: Request, res: Response) => {

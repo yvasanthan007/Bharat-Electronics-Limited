@@ -1,13 +1,14 @@
 import { useState } from 'react';
-import { 
-  X, CheckCircle2, Wand2, Sparkles, UserCheck 
+import {
+  X, CheckCircle2, Wand2, Sparkles, UserCheck
 } from 'lucide-react';
-import { 
-  generateDid, 
-  type Identity, 
-  type SecurityClearance, 
-  type IdentityStatus 
+import {
+  generateDid,
+  type Identity,
+  type SecurityClearance,
+  type IdentityStatus
 } from '../services/identities';
+import { registerExternalDIDIdentity } from '../services/did';
 
 interface CreateIdentityModalProps {
   isOpen: boolean;
@@ -74,7 +75,7 @@ export default function CreateIdentityModal({
   const [walletAddress, setWalletAddress] = useState('');
   const [status, setStatus] = useState<IdentityStatus>('Verified');
   const [avatarUrl, setAvatarUrl] = useState('https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150');
-  
+
   const [step, setStep] = useState<'form' | 'success'>('form');
   const [isLoading, setIsLoading] = useState(false);
   const [createdDid, setCreatedDid] = useState<string>('');
@@ -88,7 +89,7 @@ export default function CreateIdentityModal({
     setSecurityClearance(preset.securityClearance);
     setKeyType(preset.keyType);
     setAvatarUrl(preset.avatar);
-    
+
     const formattedEmail = preset.name
       .toLowerCase()
       .replace(/dr\.|wing commander|major/g, '')
@@ -128,6 +129,19 @@ export default function CreateIdentityModal({
 
       setCreatedDid(generatedDidStr);
       onAddIdentity(newIdentity);
+
+      // Register with DID subsystem & backend database
+      registerExternalDIDIdentity({
+        name: newIdentity.name,
+        employeeId: newIdentity.employeeId,
+        department: newIdentity.department,
+        role: newIdentity.role,
+        walletAddress: newIdentity.walletAddress,
+        publicKey: newIdentity.publicKey,
+        did: newIdentity.did,
+        email: newIdentity.email,
+      }).catch(() => {});
+
       setIsLoading(false);
       setStep('success');
     }, 700);

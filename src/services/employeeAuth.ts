@@ -4,6 +4,7 @@ import { getCredentialsByHolder, storeCredential } from './credentials';
 import { recordBlockchainEvent } from '../lib/did/blockchainLayer';
 import { createMockVC, type VerifiableCredential } from '../lib/did/vcEngine';
 import { BEL_ISSUER_DID, type DIDIdentity } from '../data/mockDIDData';
+import { getIdentities } from './identities';
 import {
   getDemoWalletAddress,
   getDemoWalletPublicKey,
@@ -84,18 +85,58 @@ function randomToken(): string {
 
 /* ------------------------------ challenge request ---------------------------- */
 
-/** Resolves a DID (full, short-display or bare 0x address) to its identity. */
+/** Resolves a DID (full, short-display, bare 0x address, name or email) to its identity. */
 function resolveIdentity(didOrAddress: string): DIDIdentity | undefined {
   const input = didOrAddress.trim();
   const all = getAllDIDIdentities();
 
   if (/^0x[0-9a-f]{40}$/i.test(input)) {
-    return all.find((d) => d.walletAddress.toLowerCase() === input.toLowerCase());
+    const direct = all.find((d) => d.walletAddress.toLowerCase() === input.toLowerCase());
+    if (direct) return direct;
   }
   const needle = input.toLowerCase();
-  return all.find(
-    (d) => d.fullDID.toLowerCase() === needle || d.did.toLowerCase() === needle
+  const directMatch = all.find(
+    (d) =>
+      d.fullDID.toLowerCase() === needle ||
+      d.did.toLowerCase() === needle ||
+      d.name.toLowerCase() === needle ||
+      (d as any).email?.toLowerCase() === needle ||
+      d.fullDID.toLowerCase().includes(needle) ||
+      d.did.toLowerCase().includes(needle)
   );
+  if (directMatch) return directMatch;
+
+  // Also check identities created via CreateIdentityModal
+  const roster = getIdentities();
+  const rosterMatch = roster.find(
+    (i) =>
+      i.did.toLowerCase() === needle ||
+      i.name.toLowerCase() === needle ||
+      i.email.toLowerCase() === needle ||
+      i.employeeId.toLowerCase() === needle ||
+      i.did.toLowerCase().includes(needle)
+  );
+
+  if (rosterMatch) {
+    const fullDID = rosterMatch.did.startsWith('did:') ? rosterMatch.did : `did:bel:sov:${rosterMatch.did}`;
+    return {
+      id: rosterMatch.id,
+      name: rosterMatch.name,
+      did: rosterMatch.did,
+      fullDID,
+      walletAddress: rosterMatch.walletAddress,
+      publicKey: rosterMatch.publicKey,
+      role: rosterMatch.role,
+      department: rosterMatch.department,
+      status: rosterMatch.status === 'Verified' ? 'Verified' : 'Pending',
+      createdOn: rosterMatch.createdOn,
+      createdAt: new Date().toISOString(),
+      verifiedAt: new Date().toISOString(),
+      lastActive: rosterMatch.lastActive,
+    };
+  }
+
+  return undefined;
 }
 
 /**
@@ -166,15 +207,33 @@ export async function signChallengeForDID(
 
   // 1. Real browser wallet that currently holds this DID's account
   if (hasBrowserWallet()) {
-    const accounts = await getBrowserWalletAccounts();
-    const match = accounts.find((a) => a.toLowerCase() === target);
-    if (match) {
-      return personalSign(match, challenge);
+    try {
+      const accounts = await getBrowserWalletAccounts();
+      const match = accounts.find((a) => a.toLowerCase() === target);
+      if (match) {
+        return await personalSign(match, challenge);
+      }
+    } catch {
+      // Fallback
     }
   }
 
   // 2. Simulated Secure Key Storage for the pre-provisioned demo employee
   if (target === getDemoWalletAddress().toLowerCase()) {
+    return signWithDemoWallet(challenge);
+  }
+
+  // 3. For any registered identity created with a DID keypair, derive deterministic signature
+  if (identity.walletAddress) {
+    try {
+      const seed = ethers.id(`bel-key-storage:${identity.fullDID.toLowerCase()}`);
+      const derivedWallet = new ethers.Wallet(seed);
+      if (derivedWallet.address.toLowerCase() === target) {
+        return await derivedWallet.signMessage(challenge);
+      }
+    } catch {
+      // Fallback
+    }
     return signWithDemoWallet(challenge);
   }
 

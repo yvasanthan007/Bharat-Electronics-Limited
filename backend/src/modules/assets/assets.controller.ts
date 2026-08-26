@@ -25,7 +25,7 @@ export class AssetsController {
   };
 
   public getAssetById = async (req: Request, res: Response): Promise<void> => {
-    const asset = await assetsService.getAssetById(req.params.id);
+    const asset = await assetsService.getAssetById(req.params.id as string);
     ApiResponse.success(res, asset, 'Digital asset details retrieved');
   };
 
@@ -35,12 +35,12 @@ export class AssetsController {
   };
 
   public toggleFavorite = async (req: Request, res: Response): Promise<void> => {
-    const result = await assetsService.toggleFavorite(req.params.id);
+    const result = await assetsService.toggleFavorite(req.params.id as string);
     ApiResponse.success(res, result, 'Asset watchlist status updated');
   };
 
   public deleteAsset = async (req: Request, res: Response): Promise<void> => {
-    const result = await assetsService.deleteAsset(req.params.id);
+    const result = await assetsService.deleteAsset(req.params.id as string);
     ApiResponse.success(res, result, 'Asset burned / deleted successfully');
   };
 }

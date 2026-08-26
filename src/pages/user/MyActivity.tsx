@@ -28,6 +28,8 @@ export default function MyActivity() {
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [filter, setFilter] = useState('All');
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   useEffect(() => {
     const load = async () => {
@@ -42,8 +44,16 @@ export default function MyActivity() {
   const filters = ['All', ...Array.from(new Set(activities.map(a => a.category)))];
   const filtered = filter === 'All' ? activities : activities.filter(a => a.category === filter);
 
+  // Pagination (client-side)
+  const totalPages = Math.max(1, Math.ceil(filtered.length / itemsPerPage));
+  const paginated = filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  useEffect(() => {
+    setCurrentPage((p) => Math.min(p, Math.max(1, Math.ceil(activities.length / itemsPerPage))));
+  }, [activities.length, itemsPerPage]);
+
   // Group by date
-  const grouped = filtered.reduce<Record<string, ActivityItem[]>>((acc, act) => {
+  const grouped = paginated.reduce<Record<string, ActivityItem[]>>((acc, act) => {
     if (!acc[act.date]) acc[act.date] = [];
     acc[act.date].push(act);
     return acc;
@@ -68,7 +78,10 @@ export default function MyActivity() {
           {filters.map(f => (
             <button
               key={f}
-              onClick={() => setFilter(f)}
+              onClick={() => {
+                setFilter(f);
+                setCurrentPage(1);
+              }}
               className={`px-3 py-1.5 rounded-lg font-medium transition-colors ${
                 f === filter ? 'bg-blue-600 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
               }`}
@@ -111,6 +124,64 @@ export default function MyActivity() {
             </div>
           </div>
         ))
+      )}
+
+      {/* Pagination footer */}
+      {filtered.length > 0 && (
+        <div className="bg-white border-slate-200 rounded-xl shadow-sm px-5 py-3 flex items-center justify-between gap-4">
+          <span className="text-xs text-slate-500">
+            Showing <strong className="font-semibold text-slate-900">{(currentPage - 1) * itemsPerPage + 1}</strong>–
+            <strong className="font-semibold text-slate-900">{Math.min(currentPage * itemsPerPage, filtered.length)}</strong> of{' '}
+            <strong className="font-semibold text-slate-900">{filtered.length}</strong> activities
+          </span>
+
+          <div className="flex items-center gap-3">
+            <select
+              value={itemsPerPage}
+              onChange={(e) => {
+                setItemsPerPage(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="px-2 py-1.5 rounded-lg border-slate-200 bg-white text-xs font-semibold text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+            >
+              <option value={10}>10 / page</option>
+              <option value={25}>25 / page</option>
+              <option value={50}>50 / page</option>
+            </select>
+
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="p-1.5 rounded-lg border-slate-200 bg-white hover:bg-slate-50 text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                aria-label="Previous page"
+              >
+                ‹
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+                <button
+                  key={pageNum}
+                  onClick={() => setCurrentPage(pageNum)}
+                  className={`w-7 h-7 rounded-lg text-xs font-semibold transition-colors ${
+                    currentPage === pageNum
+                      ? 'bg-blue-600 text-white'
+                      : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  {pageNum}
+                </button>
+              ))}
+              <button
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="p-1.5 rounded-lg border-slate-200 bg-white hover:bg-slate-50 text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                aria-label="Next page"
+              >
+                ›
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
