@@ -30,14 +30,15 @@ service cloud.firestore {
     // EMPLOYEES: Decentralized Identifier (DID) Registry
     // Stores DID, public key, role, and email for each employee.
     // Private keys are NEVER stored in Firebase.
+    // Records are seeded from the Excel dataset (which may not have a DID
+    // yet), so create only requires the core profile fields. App-issued
+    // identities always include did/publicKey (validated in code).
     // Users cannot modify their own DID/publicKey arbitrarily.
     // Only authenticated Admin/backend operations can create/update employee identity records.
     match /employees/{employeeId} {
       allow read: if true; // Needed for login challenge resolution and DID verification
       allow create: if isAuthenticated() &&
                       !hasPrivateKey(request.resource.data) &&
-                      request.resource.data.did is string &&
-                      request.resource.data.publicKey is string &&
                       request.resource.data.role is string &&
                       request.resource.data.email is string;
       allow update: if isAuthenticated() &&

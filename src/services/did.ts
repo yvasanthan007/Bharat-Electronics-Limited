@@ -104,6 +104,9 @@ export async function createDIDIdentity(params: {
       name: params.name,
       department: params.department,
       walletAddress: assignedWallet,
+      walletId: assignedWallet,
+      didStatus: 'Created',
+      didCreatedAt: now,
       status: 'Verified',
       createdAt: now,
     });
@@ -206,6 +209,9 @@ export async function registerExternalDIDIdentity(params: {
       name: params.name,
       department: params.department,
       walletAddress: params.walletAddress,
+      walletId: params.walletAddress,
+      didStatus: 'Created',
+      didCreatedAt: now,
       status: 'Verified',
       createdAt: now,
     });

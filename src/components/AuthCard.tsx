@@ -25,6 +25,8 @@ import {
   signInWithEmailAndPassword
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { findEmployeeByIdOrEmail, type FirestoreEmployee } from '../services/firebaseEmployeeService';
+import { getDashboardRouteForRole } from '../services/employeeRbac';
 
 /** Map Firebase Auth error codes to human-friendly messages. */
 const getFirebaseErrorMessage = (err: unknown): string => {
@@ -245,64 +247,128 @@ const AuthCard = () => {
           console.warn('Firestore profile write skipped:', firestoreErr);
         }
 
+        // Link the new account to its imported employee record when present
+        // (non-fatal — brand-new accounts may not exist in the dataset yet).
+        let linkedRole = 'User';
+        let linkedEmpId = employeeId.trim() || 'BEL-EMP';
+        let linkedName = employeeId || cleanId.split('@')[0];
+        let linkedDid = `did:bel:sov:${(employeeId || 'user').toLowerCase()}`;
+        try {
+          const linkedEmployee = await findEmployeeByIdOrEmail(cleanId || employeeId);
+          if (linkedEmployee) {
+            linkedRole = linkedEmployee.role || linkedRole;
+            linkedEmpId = linkedEmployee.employeeId || linkedEmpId;
+            linkedName = linkedEmployee.name || linkedEmployee.employeeName || linkedName;
+            linkedDid = linkedEmployee.did || linkedDid;
+          } else {
+            console.warn(
+              `[AuthCard] No employee record found in Firestore for "${cleanId || employeeId}" — defaulting to Employee portal.`
+            );
+          }
+        } catch (linkErr) {
+          console.warn('[AuthCard] Employee link lookup skipped:', linkErr);
+        }
+
         setIsLoading(false);
         localStorage.setItem('bel_user', JSON.stringify({
-          name: employeeId || cleanId.split('@')[0],
+          name: linkedName,
           email: cleanId || employeeId,
-          role: 'User',
-          did: `did:bel:sov:${(employeeId || 'user').toLowerCase()}`
+          role: linkedRole,
+          employeeId: linkedEmpId,
+          did: linkedDid
         }));
         localStorage.setItem('user', JSON.stringify({
-          firstName: employeeId || cleanId.split('@')[0],
-          lastName: '',
+          firstName: linkedName.split(' ')[0],
+          lastName: linkedName.split(' ').slice(1).join(' '),
           email: cleanId || employeeId,
-          role: { name: 'USER' },
-          did: `did:bel:sov:${(employeeId || 'user').toLowerCase()}`
+          employeeId: linkedEmpId,
+          role: { name: linkedRole.toUpperCase() },
+          did: linkedDid
         }));
-        navigate('/user');
+        navigate(getDashboardRouteForRole(linkedRole));
         return;
       } else {
         // Log in administrator
         const userCredential = await signInWithEmailAndPassword(auth, cleanId || employeeId, password);
         const user = userCredential.user;
 
+        // ------------------------------------------------------------------
+        // Firebase Authentication succeeded. Now resolve the matching
+        // employee record from the Firestore `employees` collection (the
+        // dataset imported from Excel) and read the employee's role for RBAC.
+        // ------------------------------------------------------------------
+        let employee: FirestoreEmployee | null = null;
+        try {
+          employee = await findEmployeeByIdOrEmail(cleanId || employeeId);
+        } catch (lookupErr) {
+          console.warn('[AuthCard] Firestore employee lookup failed:', lookupErr);
+        }
+
         let role = 'user';
         let empId = employeeId || 'BEL-EMP';
+        let displayName = '';
+        let employeeDid = '';
 
-        try {
-          const userDoc = await getDoc(doc(db, 'users', user.uid));
-          if (userDoc.exists()) {
-            const data = userDoc.data();
-            if (data.role) role = data.role;
-            if (data.employeeId) empId = data.employeeId;
+        if (employee) {
+          // Employee record found — use its role/identity for RBAC.
+          role = employee.role || role;
+          empId = employee.employeeId || empId;
+          displayName = employee.name || employee.employeeName || '';
+          employeeDid = employee.did || '';
+        } else {
+          // Missing-employee handling: no `employees` document matches this
+          // account. Fall back to the legacy users/{uid} profile so existing
+          // flows keep working, and log for diagnostics.
+          console.warn(
+            `[AuthCard] No employee record found in Firestore for "${cleanId || employeeId}" — using legacy profile.`
+          );
+          try {
+            const userDoc = await getDoc(doc(db, 'users', user.uid));
+            if (userDoc.exists()) {
+              const data = userDoc.data();
+              if (data.role) role = data.role;
+              if (data.employeeId) empId = data.employeeId;
+            }
+          } catch {
+            // If Firestore query fails, infer from email
+            if (cleanId.includes('admin')) role = 'admin';
           }
-        } catch {
-          // If Firestore query fails, infer from email
-          if (cleanId.includes('admin')) role = 'admin';
         }
 
         const isAdm = isAdminRole(role) || cleanId.includes('admin');
 
+        // Keep the legacy users/{uid} auth profile in sync (non-fatal).
+        try {
+          await setDoc(doc(db, 'users', user.uid), {
+            employeeId: empId,
+            email: cleanId || employeeId,
+            role: isAdm ? 'admin' : (employee ? role.toLowerCase() : 'user'),
+            lastLoginAt: serverTimestamp()
+          }, { merge: true });
+        } catch (profileErr) {
+          console.warn('Firestore profile sync skipped:', profileErr);
+        }
+
         setIsLoading(false);
         localStorage.setItem('bel_user', JSON.stringify({
-          name: empId || cleanId.split('@')[0],
-          email: cleanId || employeeId,
-          role: isAdm ? 'Administrator' : 'Officer',
-          did: `did:bel:sov:${(empId || 'user01').toLowerCase()}`
+          name: displayName || empId || cleanId.split('@')[0],
+          email: employee?.email || cleanId || employeeId,
+          role: isAdm ? 'Administrator' : role,
+          employeeId: empId,
+          did: employeeDid || `did:bel:sov:${(empId || 'user01').toLowerCase()}`,
+          ...(employee?.walletAddress ? { walletAddress: employee.walletAddress } : {})
         }));
         localStorage.setItem('user', JSON.stringify({
-          firstName: empId || cleanId.split('@')[0],
-          lastName: isAdm ? 'Admin' : 'Officer',
-          email: cleanId || employeeId,
-          role: { name: isAdm ? 'ADMIN' : 'USER' },
-          did: `did:bel:sov:${(empId || 'user01').toLowerCase()}`
+          firstName: displayName ? displayName.split(' ')[0] : (empId || cleanId.split('@')[0]),
+          lastName: displayName ? displayName.split(' ').slice(1).join(' ') : (isAdm ? 'Admin' : ''),
+          email: employee?.email || cleanId || employeeId,
+          employeeId: empId,
+          role: { name: isAdm ? 'ADMIN' : (employee ? role.toUpperCase() : 'USER') },
+          did: employeeDid || `did:bel:sov:${(empId || 'user01').toLowerCase()}`
         }));
 
-        if (isAdm) {
-          navigate('/bel');
-        } else {
-          navigate('/user');
-        }
+        // RBAC redirect to the correct existing dashboard
+        navigate(getDashboardRouteForRole(isAdm ? 'Administrator' : role));
         return;
       }
     } catch (err: unknown) {
