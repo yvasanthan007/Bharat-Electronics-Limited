@@ -35,6 +35,10 @@ export interface FirestoreEmployee {
   walletId?: string;
   didCreatedAt?: string;
   importedAt?: string;
+  /* Admin identity-registration fields (Create Identity modal) */
+  officialEmail?: string;
+  platform?: string;
+  keyType?: string;
 }
 
 const COLLECTION_NAME = 'employees';
@@ -101,6 +105,22 @@ function sanitizeEmployeeData(input: Record<string, any>): FirestoreEmployee {
   }
   if (input.didStatus) {
     employee.didStatus = input.didStatus;
+  }
+
+  // Admin identity-registration fields (Create Identity modal).
+  // Aliases keep the document schema aligned with the required minimum fields:
+  // employeeName / officialEmail / platform are always present on DID records.
+  if (input.employeeName || input.name) {
+    employee.employeeName = input.employeeName || name;
+  }
+  if (input.officialEmail || input.email) {
+    employee.officialEmail = (input.officialEmail || input.email).trim().toLowerCase();
+  }
+  if (input.platform || input.role) {
+    employee.platform = input.platform || role;
+  }
+  if (input.keyType) {
+    employee.keyType = input.keyType;
   }
 
   return employee;

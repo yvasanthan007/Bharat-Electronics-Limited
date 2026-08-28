@@ -115,6 +115,11 @@ export default function CreateIdentityModal({
         email: targetEmail,
         department,
         role,
+        platform: role,
+        securityClearance,
+        keyType,
+        status,
+        walletAddress: walletAddress || undefined,
       });
 
       const newIdentity: Identity = {

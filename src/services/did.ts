@@ -4,7 +4,7 @@ import { recordBlockchainEvent } from '../lib/did/blockchainLayer';
 import { mockDIDIdentities, type DIDIdentity } from '../data/mockDIDData';
 import { belApi } from './apiClient';
 import { storeWalletKey } from './secureKeyStorage';
-import { saveEmployeeToFirestore } from './firebaseEmployeeService';
+import { saveEmployeeToFirestore, getEmployeeFromFirestore } from './firebaseEmployeeService';
 
 const DID_STORAGE_KEY = 'bel_did_identities';
 
@@ -50,6 +50,11 @@ export async function createDIDIdentity(params: {
   did?: string;
   walletAddress?: string;
   publicKey?: string;
+  /* Optional Create Identity modal fields (public data only) */
+  securityClearance?: string;
+  keyType?: string;
+  status?: string;
+  platform?: string;
 }): Promise<{ identity: DIDIdentity; generated: GeneratedDID }> {
   const generated = generateDID();
   const now = new Date().toISOString();
@@ -58,6 +63,19 @@ export async function createDIDIdentity(params: {
   const assignedWallet = params.walletAddress || generated.walletAddress;
   const assignedPubKey = params.publicKey || generated.publicKey;
   const assignedDid = params.did || generated.did;
+
+  // RBAC safety: if this employeeId already exists in Firestore (e.g. imported
+  // from the Excel dataset), preserve its authoritative role so registering a
+  // DID never demotes/promotes the employee. New IDs use the form's role.
+  let effectiveRole = params.role;
+  try {
+    const existing = await getEmployeeFromFirestore(params.employeeId);
+    if (existing?.role) {
+      effectiveRole = existing.role;
+    }
+  } catch {
+    // Lookup is best-effort; fall back to the form's role.
+  }
 
   const identity: DIDIdentity = {
     id: `did_${Date.now()}`,
@@ -93,21 +111,27 @@ export async function createDIDIdentity(params: {
     }
   }
 
-  // Store DID + public key in Firebase Firestore (NEVER with private key)
+  // Store DID + public key in Firebase Firestore (NEVER with private key).
+  // Document ID = employeeId → one identity per employee, merge = no duplicates.
   try {
     await saveEmployeeToFirestore({
       employeeId: params.employeeId,
       did: assignedDid,
       publicKey: assignedPubKey,
-      role: params.role,
+      role: effectiveRole,
       email: params.email,
       name: params.name,
+      employeeName: params.name,
+      officialEmail: params.email,
+      platform: params.platform || effectiveRole,
+      securityClearance: params.securityClearance,
+      keyType: params.keyType,
       department: params.department,
       walletAddress: assignedWallet,
       walletId: assignedWallet,
       didStatus: 'Created',
       didCreatedAt: now,
-      status: 'Verified',
+      status: params.status || 'Verified',
       createdAt: now,
     });
   } catch {

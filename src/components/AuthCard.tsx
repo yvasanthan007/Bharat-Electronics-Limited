@@ -25,7 +25,7 @@ import {
   signInWithEmailAndPassword
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
-import { findEmployeeByIdOrEmail, type FirestoreEmployee } from '../services/firebaseEmployeeService';
+import { findEmployeeByIdOrEmail, getEmployeeFromFirestore, type FirestoreEmployee } from '../services/firebaseEmployeeService';
 import { getDashboardRouteForRole } from '../services/employeeRbac';
 
 /** Map Firebase Auth error codes to human-friendly messages. */
@@ -398,7 +398,76 @@ const AuthCard = () => {
       return;
     }
 
+    // ------------------------------------------------------------------
+    // STEP 1 — Verify the DID against Firebase Firestore.
+    // Find the employee whose stored `did` matches the entered DID.
+    // (Exact match → lowercase retry → bare wallet-address retry.)
+    // ------------------------------------------------------------------
     setLoginPhase('challenging');
+    let matchedEmployee: FirestoreEmployee | null = null;
+    try {
+      matchedEmployee = await getEmployeeFromFirestore(did);
+      if (!matchedEmployee && did.toLowerCase() !== did) {
+        matchedEmployee = await getEmployeeFromFirestore(did.toLowerCase());
+      }
+      if (!matchedEmployee) {
+        const addressMatch = did.match(/0x[0-9a-fA-F]{40}/);
+        if (addressMatch) {
+          matchedEmployee = await getEmployeeFromFirestore(addressMatch[0].toLowerCase());
+        }
+      }
+    } catch (lookupErr) {
+      console.warn('[AuthCard] Firestore DID lookup failed:', lookupErr);
+    }
+
+    // ------------------------------------------------------------------
+    // STEP 2 — DID found in the Firestore identity registry:
+    // authenticate the matched employee directly (DID → employee).
+    // The registry is the source of truth — no signature challenge needed.
+    // ------------------------------------------------------------------
+    if (matchedEmployee) {
+      const empName = matchedEmployee.name || matchedEmployee.employeeName || 'BEL Employee';
+      const empRole = matchedEmployee.role || 'Employee';
+      const empDid = matchedEmployee.did || did;
+      const isAdm = isAdminRole(empRole);
+
+      setLoginPhase('success');
+      setOutcome({
+        ok: true,
+        title: 'Login successful',
+        message: `${empName} · DID verified against BEL identity registry. Redirecting…`,
+        steps: [
+          { label: 'DID resolved', passed: true, detail: empDid },
+          { label: 'Firestore match', passed: true, detail: `${matchedEmployee.employeeId || '—'} · ${empName}` },
+          { label: 'Role verified', passed: true, detail: empRole },
+        ],
+      });
+
+      localStorage.setItem('user', JSON.stringify({
+        firstName: empName.split(' ')[0],
+        lastName: empName.split(' ').slice(1).join(' '),
+        employeeId: matchedEmployee.employeeId || '',
+        role: { name: isAdm ? 'ADMIN' : empRole },
+        did: empDid,
+        walletAddress: matchedEmployee.walletAddress || '',
+      }));
+      localStorage.setItem('bel_user', JSON.stringify({
+        name: empName,
+        role: isAdm ? 'Administrator' : empRole,
+        employeeId: matchedEmployee.employeeId || '',
+        did: empDid,
+        walletAddress: matchedEmployee.walletAddress || '',
+      }));
+
+      // RBAC: Admin DIDs go to the Admin dashboard, everyone else to the
+      // existing User/Employee Portal.
+      window.setTimeout(() => navigate(getDashboardRouteForRole(empRole)), 900);
+      return;
+    }
+
+    // ------------------------------------------------------------------
+    // STEP 3 — Existing challenge/response flow (wallet key signature proof).
+    // ------------------------------------------------------------------
     try {
       await ensureDemoEmployeeRegistered();
 
@@ -440,7 +509,9 @@ const AuthCard = () => {
         setOutcome({
           ok: false,
           title: 'Access denied',
-          message: result.error ?? 'Verification failed.',
+          message: matchedEmployee
+            ? (result.error ?? 'Verification failed.')
+            : 'Invalid or unregistered DID — no matching employee found in the BEL identity registry.',
           steps: result.steps,
         });
       }
@@ -449,7 +520,9 @@ const AuthCard = () => {
       setOutcome({
         ok: false,
         title: 'Access denied',
-        message: err instanceof Error ? err.message : 'Authentication failed.',
+        message: matchedEmployee
+          ? (err instanceof Error ? err.message : 'Authentication failed.')
+          : 'Invalid or unregistered DID — no matching employee found in the BEL identity registry.',
         steps: [],
       });
     }

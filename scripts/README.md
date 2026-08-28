@@ -99,4 +99,30 @@ denied it transparently falls back to anonymous sign-in, or use
 `--service-account`. The script verifies sample documents at the end
 (`created/updated/unchanged` counts + retrieval check).
 
+## Viewing the imported data
+
+**Option 1 — Firebase Console (visual)**
+
+1. https://console.firebase.google.com → project **bel-sih-b9392**
+2. Build → **Firestore Database**
+3. Click the **`employees`** collection → browse all documents
+   (`BEL1001`…`BEL1500`). Click a document to see its fields.
+
+**Option 2 — `view_employees.py` (fast terminal viewer)**
+
+```powershell
+python scripts\view_employees.py                    # first 15 employees (table)
+python scripts\view_employees.py --limit 30         # first 30
+python scripts\view_employees.py --id BEL1001       # one employee, all fields
+python scripts\view_employees.py --role Admin       # filter by role
+python scripts\view_employees.py --search singh     # search name/email/dept
+python scripts\view_employees.py --count            # total count only
+```
+
+**Option 3 — `verify_import.py` (full verification)**
+
+```powershell
+python scripts\verify_import.py   # count + role distribution + field samples
+```
+
 > local emulator (272/272 documents).
