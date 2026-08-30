@@ -281,13 +281,15 @@ export async function signChallengeForDID(
         return await derivedWallet.signMessage(challenge);
       }
     } catch {
-      // Fallback
+      // Fall through to the fail-closed guard below
     }
-    return signWithDemoWallet(challenge);
   }
 
+  // SECURITY (fail-closed): never sign with an unrelated key. A signature from
+  // any other private key can never satisfy server-side verification against
+  // the DID's registered public key, so refuse loudly instead.
   throw new Error(
-    `No secure key storage available for ${identity.did}. Connect a wallet holding ${target.substring(0, 10)}… or use the demo DID.`
+    `No secure key storage available for ${identity.did}. This browser's wallet does not hold the private key for this DID — sign in on the device where the DID was issued, or connect the wallet holding ${target.substring(0, 10)}…`
   );
 }
 
@@ -561,6 +563,15 @@ export function clearEmployeeSession(): void {
   } catch {
     /* storage unavailable */
   }
+}
+
+/**
+ * Persists an authenticated employee session (opaque 8h token).
+ * Used by the DID challenge/response login once server-side verification
+ * has succeeded. The session carries no secrets and no private keys.
+ */
+export function persistEmployeeSession(session: EmployeeSession): void {
+  saveSession(session);
 }
 
 /** True when a valid employee session exists. */

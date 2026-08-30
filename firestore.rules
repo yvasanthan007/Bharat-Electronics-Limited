@@ -90,5 +90,29 @@ service cloud.firestore {
       allow update: if false;
       allow delete: if false;
     }
+
+    // DID AUTH CHALLENGES: single-use challenge/response nonces for employee login.
+    // A challenge document contains NO secrets (public challenge text + DID +
+    // employeeID + timestamps + used flag). Anyone may request a login
+    // challenge (mirrors a public auth endpoint); authentication strength comes
+    // from server-side signature verification against the employee's public key
+    // and the single-use consume below. Private keys are forbidden; challenges
+    // may ONLY be flipped used:false→true (replay protection) and never deleted.
+    match /didChallenges/{challengeId} {
+      allow read: if true;
+      allow create: if !hasPrivateKey(request.resource.data)
+                    && request.resource.data.challenge is string
+                    && request.resource.data.DID is string
+                    && request.resource.data.employeeID is string
+                    && request.resource.data.expiresAt is string
+                    && request.resource.data.used == false;
+      allow update: if resource.data.used == false
+                    && request.resource.data.used == true
+                    && request.resource.data.challenge == resource.data.challenge
+                    && request.resource.data.DID == resource.data.DID
+                    && request.resource.data.employeeID == resource.data.employeeID
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['used', 'usedAt']);
+      allow delete: if false;
+    }
   }
 }

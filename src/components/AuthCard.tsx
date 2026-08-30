@@ -13,18 +13,21 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
-  requestLoginChallengeByDID,
-  completeLoginChallenge,
   ensureDemoEmployeeRegistered,
   signChallengeForDID,
   getDemoEmployeeDID,
+  persistEmployeeSession,
 } from '../services/employeeAuth';
+import {
+  issueDidChallenge,
+  verifyDidChallengeResponse,
+} from '../services/didAuthServer';
 import { auth, db } from '../lib/firebase';
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { findEmployeeByIdOrEmail, getEmployeeFromFirestore, type FirestoreEmployee } from '../services/firebaseEmployeeService';
 import { getDashboardRouteForRole } from '../services/employeeRbac';
 
@@ -71,6 +74,62 @@ const PHASE_LABELS: Record<DidLoginPhase, string> = {
   success: 'Identity proven ✓',
 };
 
+/* ------------------------------------------------------------------ */
+/* Post-credential DID Authentication (challenge / response) screen.   */
+/* Sequence: Username/Password → User Found → Challenge → Confirm in   */
+/* Wallet → Signature Verification → DID Authenticated → RBAC →        */
+/* Dashboard. Rendered with the existing card styling.                 */
+/* ------------------------------------------------------------------ */
+type DidAuthStepStatus = 'pending' | 'active' | 'passed' | 'failed';
+
+interface DidAuthViewStep {
+  label: string;
+  detail: string;
+  status: DidAuthStepStatus;
+}
+
+interface DidAuthState {
+  steps: DidAuthViewStep[];
+  challengeId: string;
+  challenge: string;
+  did: string;
+  expiresAt: string;
+  busy: boolean;
+  failed: boolean;
+  error: string;
+  done: boolean;
+  route: string;
+  authUid: string;
+  email: string;
+}
+
+/** Indices into the fixed DID-auth step list above. */
+const DID_STEPS = {
+  CREDENTIALS: 0,
+  USER_FOUND: 1,
+  CHALLENGE: 2,
+  WALLET: 3,
+  SIGNATURE: 4,
+  AUTHENTICATED: 5,
+  RBAC: 6,
+  DASHBOARD: 7,
+} as const;
+
+const SESSION_TTL_MS = 8 * 60 * 60 * 1000; // 8 hours (matches employeeAuth)
+
+function newDidAuthSteps(): DidAuthViewStep[] {
+  return [
+    { label: 'Username & Password', detail: 'Verified via Firebase Authentication', status: 'passed' },
+    { label: 'User Found', detail: 'Resolving employee record in Firebase…', status: 'active' },
+    { label: 'Challenge', detail: 'Waiting for the one-time challenge…', status: 'pending' },
+    { label: 'Confirm in Wallet', detail: 'Waiting for your confirmation', status: 'pending' },
+    { label: 'Signature Verification', detail: 'Server-side check against the DID public key', status: 'pending' },
+    { label: 'DID Authenticated', detail: '', status: 'pending' },
+    { label: 'RBAC', detail: '', status: 'pending' },
+    { label: 'Dashboard', detail: '', status: 'pending' },
+  ];
+}
+
 const AuthCard = () => {
   const [isSignUp, setIsSignUp] = useState(false);
   const [employeeId, setEmployeeId] = useState('');
@@ -81,6 +140,7 @@ const AuthCard = () => {
   const [didInput, setDidInput] = useState('');
   const [loginPhase, setLoginPhase] = useState<DidLoginPhase>('idle');
   const [outcome, setOutcome] = useState<OutcomeView | null>(null);
+  const [didAuth, setDidAuth] = useState<DidAuthState | null>(null);
   const navigate = useNavigate();
 
   const isDidBusy = loginPhase !== 'idle' && loginPhase !== 'success';
@@ -88,6 +148,218 @@ const AuthCard = () => {
   const isAdminRole = (roleStr: string): boolean => {
     const r = (roleStr || '').trim().toUpperCase();
     return r === 'ADMIN' || r === 'ADMINISTRATOR' || r === 'SECURITY OFFICER';
+  };
+
+  /* ------------------ DID Authentication (challenge/response) ------------------ */
+
+  const updateDidAuth = (patch: Partial<DidAuthState>) =>
+    setDidAuth((prev) => (prev ? { ...prev, ...patch } : prev));
+
+  const markDidStep = (idx: number, status: DidAuthStepStatus, detail?: string) =>
+    setDidAuth((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        steps: prev.steps.map((s, i) =>
+          i === idx ? { ...s, status, detail: detail ?? s.detail } : s
+        ),
+      };
+    });
+
+  const failDidAuth = (idx: number, message: string, detail?: string) => {
+    markDidStep(idx, 'failed', detail ?? message);
+    updateDidAuth({ failed: true, error: message, busy: false });
+  };
+
+  /**
+   * Applies a server-verified DID session: 8h opaque session + the exact
+   * localStorage shapes the existing login flow writes (consumed by the
+   * App.tsx route guards, Header, UserHeader) + legacy users/{uid} sync.
+   * Returns the RBAC dashboard route for the Firebase-verified role.
+   */
+  const applyDidAuthSession = (
+    session: {
+      did: string;
+      name: string;
+      role: string;
+      employeeId: string;
+      walletAddress: string;
+      email?: string;
+    },
+    email: string,
+    uid?: string
+  ): string => {
+    const role = (session.role || 'Employee').trim();
+    const isAdm = isAdminRole(role);
+    const route = getDashboardRouteForRole(isAdm ? 'Administrator' : role);
+
+    const now = Date.now();
+    persistEmployeeSession({
+      token:
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? `bel_s_${crypto.randomUUID()}`
+          : `bel_s_${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`,
+      did: session.did,
+      name: session.name,
+      role,
+      walletAddress: session.walletAddress,
+      employeeId: session.employeeId,
+      createdAt: new Date(now).toISOString(),
+      expiresAt: new Date(now + SESSION_TTL_MS).toISOString(),
+    });
+
+    localStorage.setItem('bel_user', JSON.stringify({
+      name: session.name,
+      email: session.email || email,
+      role: isAdm ? 'Administrator' : role,
+      employeeId: session.employeeId,
+      did: session.did,
+      ...(session.walletAddress ? { walletAddress: session.walletAddress } : {}),
+    }));
+    localStorage.setItem('user', JSON.stringify({
+      firstName: session.name.split(' ')[0],
+      lastName: session.name.split(' ').slice(1).join(' ') || (isAdm ? 'Admin' : ''),
+      email: session.email || email,
+      employeeId: session.employeeId,
+      role: { name: isAdm ? 'ADMIN' : role.toUpperCase() },
+      did: session.did,
+    }));
+
+    // Keep the legacy users/{uid} auth profile in sync (non-fatal).
+    if (uid) {
+      setDoc(doc(db, 'users', uid), {
+        employeeId: session.employeeId,
+        email: session.email || email,
+        role: isAdm ? 'admin' : role.toLowerCase(),
+        lastLoginAt: serverTimestamp(),
+      }, { merge: true }).catch((profileErr: unknown) => {
+        console.warn('Firestore profile sync skipped:', profileErr);
+      });
+    }
+
+    return route;
+  };
+
+  /**
+   * STEP 2 of login — DID Authentication (REQUIRED after valid credentials).
+   * Resolves the employee record in Firebase, then the server issues a
+   * single-use challenge bound to that employee's DID.
+   */
+  const startDidAuthAfterCredentials = async (uid: string, email: string) => {
+    setDidAuth({
+      steps: newDidAuthSteps(),
+      challengeId: '',
+      challenge: '',
+      did: '',
+      expiresAt: '',
+      busy: false,
+      failed: false,
+      error: '',
+      done: false,
+      route: '',
+      authUid: uid,
+      email,
+    });
+
+    try {
+      const employee = await findEmployeeByIdOrEmail(email);
+      if (!employee) {
+        failDidAuth(
+          DID_STEPS.USER_FOUND,
+          'No employee record found in Firebase for this account. Contact BEL IT Security.'
+        );
+        return;
+      }
+      const empName = employee.name || employee.employeeName || email.split('@')[0];
+      markDidStep(DID_STEPS.USER_FOUND, 'passed', `${empName} · ${employee.employeeId || email}`);
+
+      markDidStep(DID_STEPS.CHALLENGE, 'active', 'Generating one-time challenge…');
+      const issued = await issueDidChallenge(employee);
+      markDidStep(
+        DID_STEPS.CHALLENGE,
+        'passed',
+        `Single-use challenge stored · expires ${new Date(issued.expiresAt).toLocaleTimeString()}`
+      );
+      updateDidAuth({
+        challengeId: issued.challengeId,
+        challenge: issued.challenge,
+        did: issued.did,
+        expiresAt: issued.expiresAt,
+      });
+      markDidStep(DID_STEPS.WALLET, 'active', `Confirm to sign with the wallet key for ${issued.did}`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Could not start DID authentication.';
+      failDidAuth(DID_STEPS.CHALLENGE, message);
+    }
+  };
+
+  /**
+   * "Confirm in Wallet" — the employee's EXISTING wallet signs the challenge
+   * (private key never leaves the device) and the server verifies the
+   * signature against the DID public key stored in Firebase. Only
+   * { DID, challengeId, signature } are submitted — never any key material.
+   */
+  const confirmWalletSignature = async () => {
+    if (!didAuth || didAuth.busy || !didAuth.challengeId) return;
+    updateDidAuth({ busy: true, error: '' });
+
+    let signature = '';
+    try {
+      markDidStep(DID_STEPS.WALLET, 'active', 'Signing the challenge with your DID wallet key…');
+      signature = await signChallengeForDID(didAuth.did, didAuth.challenge);
+      markDidStep(DID_STEPS.WALLET, 'passed', 'Challenge signed · private key never left this device');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Wallet signing failed.';
+      failDidAuth(DID_STEPS.WALLET, message);
+      return;
+    }
+
+    try {
+      markDidStep(
+        DID_STEPS.SIGNATURE,
+        'active',
+        'Server verifying signature against the Firebase public key…'
+      );
+      const result = await verifyDidChallengeResponse({
+        challengeId: didAuth.challengeId,
+        did: didAuth.did,
+        signature,
+      });
+
+      if (!result.success || !result.session) {
+        failDidAuth(
+          DID_STEPS.SIGNATURE,
+          result.error || 'Signature verification failed. Access denied.',
+          result.error || 'Verification failed'
+        );
+        return;
+      }
+
+      markDidStep(DID_STEPS.SIGNATURE, 'passed', 'Signature valid · matches the DID public key in Firebase');
+      markDidStep(DID_STEPS.AUTHENTICATED, 'passed', 'Challenge marked used=true · replay impossible');
+      markDidStep(
+        DID_STEPS.RBAC,
+        'passed',
+        `Role from Firebase: ${result.session.role} → ${
+          isAdminRole(result.session.role) ? 'Admin dashboard (/bel)' : 'Employee portal (/user)'
+        }`
+      );
+      markDidStep(DID_STEPS.DASHBOARD, 'active', 'Opening your authorized dashboard…');
+
+      const route = applyDidAuthSession(result.session, didAuth.email, didAuth.authUid);
+      updateDidAuth({ busy: false, done: true, route });
+      window.setTimeout(() => navigate(route), 900);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'DID verification failed.';
+      failDidAuth(DID_STEPS.SIGNATURE, message);
+    }
+  };
+
+  /** Back to the credential form (fresh DID challenge next time). */
+  const resetDidAuth = () => {
+    setDidAuth(null);
+    setError('');
+    setPassword('');
   };
 
   const handleAuth = async (e: FormEvent) => {
@@ -293,82 +565,17 @@ const AuthCard = () => {
         const user = userCredential.user;
 
         // ------------------------------------------------------------------
-        // Firebase Authentication succeeded. Now resolve the matching
-        // employee record from the Firestore `employees` collection (the
-        // dataset imported from Excel) and read the employee's role for RBAC.
+        // Firebase Authentication succeeded (Username & Password ✓).
+        // Zero-trust policy: the password only proves account ownership —
+        // the employee must NOW prove identity via DID wallet
+        // challenge/response (server-side signature verification against
+        // the public key stored in Firebase) BEFORE any dashboard opens.
+        // The flow continues on the DID Authentication screen:
+        // User Found → Challenge → Confirm in Wallet → Signature
+        // Verification → DID Authenticated → RBAC → Dashboard.
         // ------------------------------------------------------------------
-        let employee: FirestoreEmployee | null = null;
-        try {
-          employee = await findEmployeeByIdOrEmail(cleanId || employeeId);
-        } catch (lookupErr) {
-          console.warn('[AuthCard] Firestore employee lookup failed:', lookupErr);
-        }
-
-        let role = 'user';
-        let empId = employeeId || 'BEL-EMP';
-        let displayName = '';
-        let employeeDid = '';
-
-        if (employee) {
-          // Employee record found — use its role/identity for RBAC.
-          role = employee.role || role;
-          empId = employee.employeeId || empId;
-          displayName = employee.name || employee.employeeName || '';
-          employeeDid = employee.did || '';
-        } else {
-          // Missing-employee handling: no `employees` document matches this
-          // account. Fall back to the legacy users/{uid} profile so existing
-          // flows keep working, and log for diagnostics.
-          console.warn(
-            `[AuthCard] No employee record found in Firestore for "${cleanId || employeeId}" — using legacy profile.`
-          );
-          try {
-            const userDoc = await getDoc(doc(db, 'users', user.uid));
-            if (userDoc.exists()) {
-              const data = userDoc.data();
-              if (data.role) role = data.role;
-              if (data.employeeId) empId = data.employeeId;
-            }
-          } catch {
-            // If Firestore query fails, infer from email
-            if (cleanId.includes('admin')) role = 'admin';
-          }
-        }
-
-        const isAdm = isAdminRole(role) || cleanId.includes('admin');
-
-        // Keep the legacy users/{uid} auth profile in sync (non-fatal).
-        try {
-          await setDoc(doc(db, 'users', user.uid), {
-            employeeId: empId,
-            email: cleanId || employeeId,
-            role: isAdm ? 'admin' : (employee ? role.toLowerCase() : 'user'),
-            lastLoginAt: serverTimestamp()
-          }, { merge: true });
-        } catch (profileErr) {
-          console.warn('Firestore profile sync skipped:', profileErr);
-        }
-
         setIsLoading(false);
-        localStorage.setItem('bel_user', JSON.stringify({
-          name: displayName || empId || cleanId.split('@')[0],
-          email: employee?.email || cleanId || employeeId,
-          role: isAdm ? 'Administrator' : role,
-          employeeId: empId,
-          did: employeeDid || `did:bel:sov:${(empId || 'user01').toLowerCase()}`,
-          ...(employee?.walletAddress ? { walletAddress: employee.walletAddress } : {})
-        }));
-        localStorage.setItem('user', JSON.stringify({
-          firstName: displayName ? displayName.split(' ')[0] : (empId || cleanId.split('@')[0]),
-          lastName: displayName ? displayName.split(' ').slice(1).join(' ') : (isAdm ? 'Admin' : ''),
-          email: employee?.email || cleanId || employeeId,
-          employeeId: empId,
-          role: { name: isAdm ? 'ADMIN' : (employee ? role.toUpperCase() : 'USER') },
-          did: employeeDid || `did:bel:sov:${(empId || 'user01').toLowerCase()}`
-        }));
-
-        // RBAC redirect to the correct existing dashboard
-        navigate(getDashboardRouteForRole(isAdm ? 'Administrator' : role));
+        await startDidAuthAfterCredentials(user.uid, cleanId || employeeId);
         return;
       }
     } catch (err: unknown) {
@@ -402,8 +609,15 @@ const AuthCard = () => {
     // STEP 1 — Verify the DID against Firebase Firestore.
     // Find the employee whose stored `did` matches the entered DID.
     // (Exact match → lowercase retry → bare wallet-address retry.)
+    // The demo employee is provisioned first (idempotent) so the demo DID
+    // resolves on first run.
     // ------------------------------------------------------------------
     setLoginPhase('challenging');
+    try {
+      await ensureDemoEmployeeRegistered();
+    } catch (demoErr) {
+      console.warn('[AuthCard] Demo employee provisioning skipped:', demoErr);
+    }
     let matchedEmployee: FirestoreEmployee | null = null;
     try {
       matchedEmployee = await getEmployeeFromFirestore(did);
@@ -421,97 +635,64 @@ const AuthCard = () => {
     }
 
     // ------------------------------------------------------------------
-    // STEP 2 — DID found in the Firestore identity registry:
-    // authenticate the matched employee directly (DID → employee).
-    // The registry is the source of truth — no signature challenge needed.
+    // STEP 2 — SECURITY: a DID existing in the registry is NOT proof of
+    // identity ("if DID exists => authenticated" is never accepted).
+    // Ownership must be proven by signing a fresh single-use challenge
+    // with the wallet key whose PUBLIC key is registered in Firebase for
+    // that DID. The signature is verified server-side.
     // ------------------------------------------------------------------
-    if (matchedEmployee) {
-      const empName = matchedEmployee.name || matchedEmployee.employeeName || 'BEL Employee';
-      const empRole = matchedEmployee.role || 'Employee';
-      const empDid = matchedEmployee.did || did;
-      const isAdm = isAdminRole(empRole);
-
-      setLoginPhase('success');
+    if (!matchedEmployee) {
+      setLoginPhase('idle');
       setOutcome({
-        ok: true,
-        title: 'Login successful',
-        message: `${empName} · DID verified against BEL identity registry. Redirecting…`,
-        steps: [
-          { label: 'DID resolved', passed: true, detail: empDid },
-          { label: 'Firestore match', passed: true, detail: `${matchedEmployee.employeeId || '—'} · ${empName}` },
-          { label: 'Role verified', passed: true, detail: empRole },
-        ],
+        ok: false,
+        title: 'Access denied',
+        message:
+          'Invalid or unregistered DID — no matching employee found in the BEL identity registry.',
+        steps: [],
       });
-
-      localStorage.setItem('user', JSON.stringify({
-        firstName: empName.split(' ')[0],
-        lastName: empName.split(' ').slice(1).join(' '),
-        employeeId: matchedEmployee.employeeId || '',
-        role: { name: isAdm ? 'ADMIN' : empRole },
-        did: empDid,
-        walletAddress: matchedEmployee.walletAddress || '',
-      }));
-      localStorage.setItem('bel_user', JSON.stringify({
-        name: empName,
-        role: isAdm ? 'Administrator' : empRole,
-        employeeId: matchedEmployee.employeeId || '',
-        did: empDid,
-        walletAddress: matchedEmployee.walletAddress || '',
-      }));
-
-      // RBAC: Admin DIDs go to the Admin dashboard, everyone else to the
-      // existing User/Employee Portal.
-      window.setTimeout(() => navigate(getDashboardRouteForRole(empRole)), 900);
       return;
     }
 
     // ------------------------------------------------------------------
-    // STEP 3 — Existing challenge/response flow (wallet key signature proof).
+    // STEP 3 — Real challenge/response flow (wallet key signature proof):
+    // server issues single-use challenge (stored in Firebase) → the
+    // employee's EXISTING wallet signs it (private key never leaves the
+    // device) → server verifies the signature against the DID public key
+    // stored in Firebase → challenge atomically marked used.
     // ------------------------------------------------------------------
     try {
-      await ensureDemoEmployeeRegistered();
-
-      const { challenge, nonce } = await requestLoginChallengeByDID(did);
+      // 3a — server-issued single-use challenge bound to this DID
+      const issued = await issueDidChallenge(matchedEmployee);
 
       setLoginPhase('signing');
-      const signature = await signChallengeForDID(did, challenge);
+      // 3b — wallet signature (secure key storage → browser wallet → demo key)
+      const signature = await signChallengeForDID(issued.did, issued.challenge);
 
       setLoginPhase('verifying');
-      const result = await completeLoginChallenge(nonce, signature);
+      // 3c — server-side verification + atomic single-use consume
+      const result = await verifyDidChallengeResponse({
+        challengeId: issued.challengeId,
+        did: issued.did,
+        signature,
+      });
 
       if (result.success && result.session) {
         setLoginPhase('success');
         setOutcome({
           ok: true,
           title: 'Login successful',
-          message: `${result.session.name} · session valid for 8h. Redirecting…`,
+          message: `${result.session.name} · DID authenticated via challenge-response. Redirecting…`,
           steps: result.steps,
         });
 
-        const isAdm = isAdminRole(result.session.role);
-        localStorage.setItem('user', JSON.stringify({
-          firstName: result.session.name.split(' ')[0],
-          lastName: result.session.name.split(' ').slice(1).join(' '),
-          role: { name: isAdm ? 'ADMIN' : result.session.role },
-          did: result.session.did,
-          walletAddress: result.session.walletAddress,
-        }));
-        localStorage.setItem('bel_user', JSON.stringify({
-          name: result.session.name,
-          role: isAdm ? 'Administrator' : result.session.role,
-          did: result.session.did,
-          walletAddress: result.session.walletAddress,
-        }));
-
-        window.setTimeout(() => navigate(isAdm ? '/bel' : '/user'), 900);
+        const route = applyDidAuthSession(result.session, result.session.email || '', undefined);
+        window.setTimeout(() => navigate(route), 900);
       } else {
         setLoginPhase('idle');
         setOutcome({
           ok: false,
           title: 'Access denied',
-          message: matchedEmployee
-            ? (result.error ?? 'Verification failed.')
-            : 'Invalid or unregistered DID — no matching employee found in the BEL identity registry.',
+          message: result.error ?? 'Verification failed.',
           steps: result.steps,
         });
       }
@@ -520,9 +701,7 @@ const AuthCard = () => {
       setOutcome({
         ok: false,
         title: 'Access denied',
-        message: matchedEmployee
-          ? (err instanceof Error ? err.message : 'Authentication failed.')
-          : 'Invalid or unregistered DID — no matching employee found in the BEL identity registry.',
+        message: err instanceof Error ? err.message : 'Authentication failed.',
         steps: [],
       });
     }
@@ -569,6 +748,105 @@ const AuthCard = () => {
         </p>
       </div>
 
+      {/* ---- Post-credential DID Authentication screen (Step 2 of 2) ---- */}
+      {didAuth ? (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-slate-800">DID Authentication</p>
+              <p className="text-xs text-slate-500">Prove your identity with your BEL DID wallet</p>
+            </div>
+            <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-100 whitespace-nowrap">
+              Step 2 of 2
+            </span>
+          </div>
+
+          <ol className="space-y-2">
+            {didAuth.steps.map((s) => (
+              <li
+                key={s.label}
+                className={`flex items-start gap-2.5 rounded-xl border p-2.5 ${
+                  s.status === 'failed'
+                    ? 'bg-red-50 border-red-200'
+                    : s.status === 'passed'
+                    ? 'bg-emerald-50/70 border-emerald-100'
+                    : s.status === 'active'
+                    ? 'bg-blue-50/60 border-blue-100'
+                    : 'bg-slate-50 border-slate-100'
+                }`}
+              >
+                <span className="mt-0.5 shrink-0">
+                  {s.status === 'passed' ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  ) : s.status === 'failed' ? (
+                    <XCircle className="w-4 h-4 text-red-600" />
+                  ) : s.status === 'active' ? (
+                    <span className="w-4 h-4 border-2 border-blue-500/30 border-t-blue-600 rounded-full animate-spin block" />
+                  ) : (
+                    <span className="w-4 h-4 rounded-full border-2 border-slate-200 block" />
+                  )}
+                </span>
+                <span className="min-w-0">
+                  <span
+                    className={`block text-xs font-bold ${
+                      s.status === 'failed' ? 'text-red-700' : 'text-slate-700'
+                    }`}
+                  >
+                    {s.label}
+                  </span>
+                  {s.detail && (
+                    <span className="block text-[11px] text-slate-500 break-words">{s.detail}</span>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ol>
+
+          {didAuth.challenge && !didAuth.done && (
+            <div className="rounded-xl bg-slate-900 p-3">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                One-time challenge · expires {new Date(didAuth.expiresAt).toLocaleTimeString()}
+              </p>
+              <pre className="mt-1 text-[10px] leading-snug text-emerald-300 whitespace-pre-wrap break-all font-mono max-h-24 overflow-y-auto">
+                {didAuth.challenge}
+              </pre>
+            </div>
+          )}
+
+          {didAuth.error && (
+            <div className="p-3 bg-red-50 border border-red-100 text-red-600 text-xs rounded-xl flex items-start gap-2">
+              <span className="mt-0.5">⚠️</span>
+              <p>{didAuth.error}</p>
+            </div>
+          )}
+
+          {!didAuth.done && !didAuth.failed && (
+            <button
+              type="button"
+              onClick={confirmWalletSignature}
+              disabled={didAuth.busy}
+              className="w-full flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white font-medium py-3 px-4 rounded-xl transition-all duration-200 disabled:opacity-60"
+            >
+              {didAuth.busy ? (
+                <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <Fingerprint className="w-5 h-5" />
+              )}
+              {didAuth.busy ? 'Verifying…' : 'Confirm in Wallet'}
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={resetDidAuth}
+            disabled={didAuth.busy && !didAuth.failed && !didAuth.done}
+            className="w-full text-xs text-slate-500 hover:text-slate-700 font-semibold"
+          >
+            ← Use a different account
+          </button>
+        </div>
+      ) : (
+      <>
       {/* Demo Credentials Quick Switcher */}
       {!isSignUp && (
         <div className="mb-5 p-2.5 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between gap-2 text-xs">
@@ -789,6 +1067,8 @@ const AuthCard = () => {
           </p>
         </div>
       </form>
+      </>
+      )}
 
       <div className="mt-5 space-y-1.5 border-t border-slate-100 pt-4">
         <div className="flex items-center justify-center gap-1.5 text-[11px] text-slate-500 font-medium">
