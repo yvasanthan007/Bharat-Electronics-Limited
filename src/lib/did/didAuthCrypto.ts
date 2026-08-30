@@ -47,6 +47,8 @@ export interface DidEmployeeDoc {
   walletAddress?: string;
   status?: string;
   employmentStatus?: string;
+  designation?: string;
+  department?: string;
 }
 
 export interface DidChallengeEvaluationInput {
@@ -73,6 +75,8 @@ export interface DidAuthSessionInfo {
   role: string;
   walletAddress: string;
   email?: string;
+  designation?: string;
+  department?: string;
 }
 
 export interface DidChallengeEvaluation {
@@ -210,7 +214,12 @@ export function evaluateDidChallenge(input: DidChallengeEvaluationInput): DidCha
     detail: 'DID belongs to the authenticated employee',
   });
 
-  // — 8. Public key exists —
+  // — 8. Public key exists in Firebase (mandatory) —
+  //
+  // The employee record MUST store the DID public key. Without it, the server
+  // cannot cryptographically verify the challenge signature, so authentication
+  // is rejected. No fallback to the DID-encoded address is permitted — the
+  // raw public key must be on file in Firebase.
   const publicKey = (employeeDoc.publicKey || '').trim();
   if (!publicKey) {
     return fail('No DID public key on file for this employee. Contact BEL IT Security.');
@@ -262,6 +271,8 @@ export function evaluateDidChallenge(input: DidChallengeEvaluationInput): DidCha
     role: (employeeDoc.role || 'Employee').trim(),
     walletAddress: employeeDoc.walletAddress || boundWallet || pubAddress,
     email: employeeDoc.email,
+    designation: (employeeDoc.designation || '').trim() || undefined,
+    department: (employeeDoc.department || '').trim() || undefined,
   };
 
   return { ok: true, steps, session };

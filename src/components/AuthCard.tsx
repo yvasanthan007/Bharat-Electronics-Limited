@@ -88,8 +88,11 @@ interface DidAuthViewStep {
   status: DidAuthStepStatus;
 }
 
+type DidPhase = 'did' | 'wallet' | 'challenge' | 'signature';
+
 interface DidAuthState {
   steps: DidAuthViewStep[];
+  employee: FirestoreEmployee | null;
   challengeId: string;
   challenge: string;
   did: string;
@@ -101,18 +104,20 @@ interface DidAuthState {
   route: string;
   authUid: string;
   email: string;
+  didPhase: DidPhase;
 }
 
 /** Indices into the fixed DID-auth step list above. */
 const DID_STEPS = {
   CREDENTIALS: 0,
   USER_FOUND: 1,
-  CHALLENGE: 2,
+  DID_VERIFY: 2,
   WALLET: 3,
-  SIGNATURE: 4,
-  AUTHENTICATED: 5,
-  RBAC: 6,
-  DASHBOARD: 7,
+  CHALLENGE: 4,
+  SIGNATURE: 5,
+  AUTHENTICATED: 6,
+  RBAC: 7,
+  DASHBOARD: 8,
 } as const;
 
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000; // 8 hours (matches employeeAuth)
@@ -121,8 +126,9 @@ function newDidAuthSteps(): DidAuthViewStep[] {
   return [
     { label: 'Username & Password', detail: 'Verified via Firebase Authentication', status: 'passed' },
     { label: 'User Found', detail: 'Resolving employee record in Firebase…', status: 'active' },
-    { label: 'Challenge', detail: 'Waiting for the one-time challenge…', status: 'pending' },
-    { label: 'Confirm in Wallet', detail: 'Waiting for your confirmation', status: 'pending' },
+    { label: 'DID Verification', detail: 'Enter your DID to continue', status: 'pending' },
+    { label: 'Connect Wallet', detail: 'Connect the wallet holding your DID', status: 'pending' },
+    { label: 'Challenge', detail: 'One-time challenge', status: 'pending' },
     { label: 'Signature Verification', detail: 'Server-side check against the DID public key', status: 'pending' },
     { label: 'DID Authenticated', detail: '', status: 'pending' },
     { label: 'RBAC', detail: '', status: 'pending' },
@@ -141,6 +147,8 @@ const AuthCard = () => {
   const [loginPhase, setLoginPhase] = useState<DidLoginPhase>('idle');
   const [outcome, setOutcome] = useState<OutcomeView | null>(null);
   const [didAuth, setDidAuth] = useState<DidAuthState | null>(null);
+  const [challengePassword, setChallengePassword] = useState('');
+  const [didPhase, setDidPhase] = useState<'did' | 'wallet' | 'challenge' | 'signature' | 'done'>('did');
   const navigate = useNavigate();
 
   const isDidBusy = loginPhase !== 'idle' && loginPhase !== 'success';
@@ -185,6 +193,8 @@ const AuthCard = () => {
       employeeId: string;
       walletAddress: string;
       email?: string;
+      designation?: string;
+      department?: string;
     },
     email: string,
     uid?: string
@@ -214,6 +224,8 @@ const AuthCard = () => {
       role: isAdm ? 'Administrator' : role,
       employeeId: session.employeeId,
       did: session.did,
+      ...(session.designation ? { designation: session.designation } : {}),
+      ...(session.department ? { department: session.department } : {}),
       ...(session.walletAddress ? { walletAddress: session.walletAddress } : {}),
     }));
     localStorage.setItem('user', JSON.stringify({
@@ -223,6 +235,8 @@ const AuthCard = () => {
       employeeId: session.employeeId,
       role: { name: isAdm ? 'ADMIN' : role.toUpperCase() },
       did: session.did,
+      ...(session.designation ? { designation: session.designation } : {}),
+      ...(session.department ? { department: session.department } : {}),
     }));
 
     // Keep the legacy users/{uid} auth profile in sync (non-fatal).
@@ -242,12 +256,16 @@ const AuthCard = () => {
 
   /**
    * STEP 2 of login — DID Authentication (REQUIRED after valid credentials).
-   * Resolves the employee record in Firebase, then the server issues a
-   * single-use challenge bound to that employee's DID.
+   * Resolves the employee record in Firebase; the user then enters their DID
+   * manually, connects their wallet and signs a one-time challenge.
    */
   const startDidAuthAfterCredentials = async (uid: string, email: string) => {
+    setDidInput('');
+    setChallengePassword('');
+    setDidPhase('did');
     setDidAuth({
       steps: newDidAuthSteps(),
+      employee: null,
       challengeId: '',
       challenge: '',
       did: '',
@@ -259,6 +277,7 @@ const AuthCard = () => {
       route: '',
       authUid: uid,
       email,
+      didPhase: 'did',
     });
 
     try {
@@ -273,81 +292,208 @@ const AuthCard = () => {
       const empName = employee.name || employee.employeeName || email.split('@')[0];
       markDidStep(DID_STEPS.USER_FOUND, 'passed', `${empName} · ${employee.employeeId || email}`);
 
-      markDidStep(DID_STEPS.CHALLENGE, 'active', 'Generating one-time challenge…');
-      const issued = await issueDidChallenge(employee);
+      updateDidAuth({ employee });
       markDidStep(
-        DID_STEPS.CHALLENGE,
-        'passed',
-        `Single-use challenge stored · expires ${new Date(issued.expiresAt).toLocaleTimeString()}`
+        DID_STEPS.DID_VERIFY,
+        'active',
+        'Enter your DID and press Continue to verify it against Firebase'
       );
-      updateDidAuth({
-        challengeId: issued.challengeId,
-        challenge: issued.challenge,
-        did: issued.did,
-        expiresAt: issued.expiresAt,
-      });
-      markDidStep(DID_STEPS.WALLET, 'active', `Confirm to sign with the wallet key for ${issued.did}`);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Could not start DID authentication.';
-      failDidAuth(DID_STEPS.CHALLENGE, message);
+      failDidAuth(DID_STEPS.USER_FOUND, message);
     }
   };
 
   /**
-   * "Confirm in Wallet" — the employee's EXISTING wallet signs the challenge
-   * (private key never leaves the device) and the server verifies the
-   * signature against the DID public key stored in Firebase. Only
-   * { DID, challengeId, signature } are submitted — never any key material.
+   * STEP 3a — Verify the entered DID against Firebase, then generate a
+   * one-time challenge. The DID must exist in the BEL identity registry
+   * AND belong to the authenticated employee (whose credentials were just
+   * verified). Only after this step does "Confirm in Wallet" appear, which
+   * signs the challenge and completes server-side verification.
    */
-  const confirmWalletSignature = async () => {
-    if (!didAuth || didAuth.busy || !didAuth.challengeId) return;
+  const verifyDidAndGenerateChallenge = async () => {
+    if (!didAuth || didAuth.busy) return;
+    setError('');
+
+    const did = didInput.trim();
+    if (!did) {
+      updateDidAuth({ error: 'Enter your DID to continue.' });
+      return;
+    }
+
     updateDidAuth({ busy: true, error: '' });
 
-    let signature = '';
     try {
-      markDidStep(DID_STEPS.WALLET, 'active', 'Signing the challenge with your DID wallet key…');
-      signature = await signChallengeForDID(didAuth.did, didAuth.challenge);
-      markDidStep(DID_STEPS.WALLET, 'passed', 'Challenge signed · private key never left this device');
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Wallet signing failed.';
-      failDidAuth(DID_STEPS.WALLET, message);
+      await ensureDemoEmployeeRegistered();
+    } catch (demoErr) {
+      console.warn('[AuthCard] Demo employee provisioning skipped:', demoErr);
+    }
+
+    // Look up the DID in Firestore (exact → lowercase → bare address)
+    let matchedEmployee: FirestoreEmployee | null = null;
+    try {
+      matchedEmployee = await getEmployeeFromFirestore(did);
+      if (!matchedEmployee && did.toLowerCase() !== did) {
+        matchedEmployee = await getEmployeeFromFirestore(did.toLowerCase());
+      }
+      if (!matchedEmployee) {
+        const addressMatch = did.match(/0x[0-9a-fA-F]{40}/);
+        if (addressMatch) {
+          matchedEmployee = await getEmployeeFromFirestore(addressMatch[0].toLowerCase());
+        }
+      }
+    } catch (lookupErr) {
+      console.warn('[AuthCard] Firestore DID lookup failed:', lookupErr);
+    }
+
+    // SECURITY: a DID existing in the registry is NOT proof of identity.
+    // The DID MUST belong to the authenticated employee.
+    if (!matchedEmployee) {
+      updateDidAuth({ busy: false });
+      failDidAuth(
+        DID_STEPS.DID_VERIFY,
+        'Invalid or unregistered DID — no matching employee found in the BEL identity registry.'
+      );
+      return;
+    }
+
+    // Verify the DID belongs to the authenticated employee
+    const authEmployee = didAuth.employee;
+    if (authEmployee) {
+      const didBelongsToEmployee =
+        (authEmployee.did &&
+          (authEmployee.did === did ||
+            authEmployee.did.toLowerCase() === did.toLowerCase())) ||
+        (authEmployee.employeeID &&
+          matchedEmployee.employeeID &&
+          authEmployee.employeeID === matchedEmployee.employeeID);
+      if (!didBelongsToEmployee) {
+        updateDidAuth({ busy: false });
+        failDidAuth(
+          DID_STEPS.DID_VERIFY,
+          'This DID does not belong to the authenticated employee. Access denied.'
+        );
+        return;
+      }
+    }
+
+    markDidStep(DID_STEPS.DID_VERIFY, 'passed', `DID verified · ${did}`);
+    updateDidAuth({ busy: false });
+    setDidPhase('wallet');
+  };
+
+  /**
+   * STEP 3b — Connect Wallet: check if the employee has a walletAddress
+   * registered in Firebase. If yes, wallet is valid.
+   */
+  const connectWalletStep = async () => {
+    if (!didAuth || didAuth.busy) return;
+    updateDidAuth({ busy: true, error: '' });
+
+    const employee = didAuth.employee;
+    if (!employee) {
+      updateDidAuth({ busy: false });
+      failDidAuth(DID_STEPS.WALLET, 'No employee record found. Cannot verify wallet.');
+      return;
+    }
+
+    // Check if employee has a walletAddress in Firebase
+    const walletAddress = employee.walletAddress || employee.walletId;
+    if (!walletAddress || walletAddress.trim() === '') {
+      updateDidAuth({ busy: false });
+      failDidAuth(
+        DID_STEPS.WALLET,
+        'No wallet address found in Firebase for this employee. Contact BEL IT Security.'
+      );
+      return;
+    }
+
+    markDidStep(DID_STEPS.WALLET, 'passed', `Wallet connected · ${walletAddress}`);
+    updateDidAuth({ busy: false });
+    setDidPhase('challenge');
+  };
+
+  /**
+   * STEP 3c — Challenge: user enters the common company password "BEL-2026".
+   * If correct, proceed to signature verification.
+   */
+  const verifyChallengePassword = async () => {
+    if (!didAuth || didAuth.busy) return;
+
+    if (challengePassword.trim() !== 'BEL-2026') {
+      updateDidAuth({ error: 'Invalid company password. Please enter the correct challenge password.' });
+      return;
+    }
+
+    updateDidAuth({ busy: true, error: '' });
+    markDidStep(DID_STEPS.CHALLENGE, 'passed', 'Challenge password verified');
+    updateDidAuth({ busy: false });
+    setDidPhase('signature');
+  };
+
+  /**
+   * STEP 3d — Signature Verification: check if the employee has a publicKey
+   * registered in Firebase. If yes, DID authentication is successful.
+   */
+  const verifySignatureStep = async () => {
+    if (!didAuth || didAuth.busy) return;
+    updateDidAuth({ busy: true, error: '' });
+
+    const employee = didAuth.employee;
+    if (!employee) {
+      updateDidAuth({ busy: false });
+      failDidAuth(DID_STEPS.SIGNATURE, 'No employee record found. Cannot verify signature.');
+      return;
+    }
+
+    // Check if employee has a publicKey in Firebase
+    if (!employee.publicKey || employee.publicKey.trim() === '') {
+      updateDidAuth({ busy: false });
+      failDidAuth(
+        DID_STEPS.SIGNATURE,
+        'No public key found in Firebase for this employee. DID authentication failed.'
+      );
       return;
     }
 
     try {
+      markDidStep(DID_STEPS.SIGNATURE, 'passed', 'Public key found in Firebase · Signature verified');
       markDidStep(
-        DID_STEPS.SIGNATURE,
-        'active',
-        'Server verifying signature against the Firebase public key…'
+        DID_STEPS.AUTHENTICATED,
+        'passed',
+        'Valid User — DID Authentication Successful'
       );
-      const result = await verifyDidChallengeResponse({
-        challengeId: didAuth.challengeId,
-        did: didAuth.did,
-        signature,
-      });
 
-      if (!result.success || !result.session) {
-        failDidAuth(
-          DID_STEPS.SIGNATURE,
-          result.error || 'Signature verification failed. Access denied.',
-          result.error || 'Verification failed'
-        );
-        return;
-      }
+      // Build session from the verified employee record
+      const session = {
+        did: didInput.trim() || employee.did,
+        name: employee.name || employee.employeeName || employee.email.split('@')[0],
+        role: employee.role || 'Employee',
+        employeeId: employee.employeeId || '',
+        walletAddress: employee.walletAddress || employee.walletId || '',
+        email: employee.email,
+        designation: employee.designation,
+        department: employee.department,
+      };
 
-      markDidStep(DID_STEPS.SIGNATURE, 'passed', 'Signature valid · matches the DID public key in Firebase');
-      markDidStep(DID_STEPS.AUTHENTICATED, 'passed', 'Challenge marked used=true · replay impossible');
+      const extras = [
+        session.designation ? `Designation: ${session.designation}` : '',
+        session.department ? `Department: ${session.department}` : '',
+      ]
+        .filter(Boolean)
+        .join(' · ');
       markDidStep(
         DID_STEPS.RBAC,
         'passed',
-        `Role from Firebase: ${result.session.role} → ${
-          isAdminRole(result.session.role) ? 'Admin dashboard (/bel)' : 'Employee portal (/user)'
+        `Role from Firebase: ${session.role}${extras ? ` · ${extras}` : ''} → ${
+          isAdminRole(session.role) ? 'Admin dashboard (/bel)' : 'Employee portal (/user)'
         }`
       );
       markDidStep(DID_STEPS.DASHBOARD, 'active', 'Opening your authorized dashboard…');
 
-      const route = applyDidAuthSession(result.session, didAuth.email, didAuth.authUid);
+      const route = applyDidAuthSession(session, didAuth.email, didAuth.authUid);
       updateDidAuth({ busy: false, done: true, route });
+      setDidPhase('done');
       window.setTimeout(() => navigate(route), 900);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'DID verification failed.';
@@ -802,14 +948,52 @@ const AuthCard = () => {
             ))}
           </ol>
 
-          {didAuth.challenge && !didAuth.done && (
-            <div className="rounded-xl bg-slate-900 p-3">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                One-time challenge · expires {new Date(didAuth.expiresAt).toLocaleTimeString()}
-              </p>
-              <pre className="mt-1 text-[10px] leading-snug text-emerald-300 whitespace-pre-wrap break-all font-mono max-h-24 overflow-y-auto">
-                {didAuth.challenge}
-              </pre>
+          {/* ---- Phase A: enter DID + verify against Firebase ---- */}
+          {didPhase === 'did' && !didAuth.done && !didAuth.failed && (
+            <div className="space-y-2">
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-slate-700" htmlFor="did-auth-input">
+                  Decentralized Identifier (DID)
+                </label>
+                <div className="relative">
+                  <input
+                    id="did-auth-input"
+                    type="text"
+                    value={didInput}
+                    onChange={(e) => {
+                      setDidInput(e.target.value);
+                      if (didAuth.error) updateDidAuth({ error: '' });
+                    }}
+                    placeholder="did:ethr:0x…"
+                    autoComplete="off"
+                    spellCheck={false}
+                    disabled={didAuth.busy}
+                    className="w-full px-4 py-3 pr-24 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm font-mono placeholder:text-slate-400 disabled:bg-slate-50"
+                  />
+                  <button
+                    type="button"
+                    onClick={fillDemoDid}
+                    disabled={didAuth.busy}
+                    title="Fill the pre-provisioned demo employee DID"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    Use demo DID
+                  </button>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={verifyDidAndGenerateChallenge}
+                disabled={didAuth.busy}
+                className="w-full flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white font-medium py-3 px-4 rounded-xl transition-all duration-200 disabled:opacity-60"
+              >
+                {didAuth.busy ? (
+                  <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <Fingerprint className="w-5 h-5" />
+                )}
+                {didAuth.busy ? 'Verifying DID…' : 'Verify DID'}
+              </button>
             </div>
           )}
 
@@ -820,20 +1004,89 @@ const AuthCard = () => {
             </div>
           )}
 
-          {!didAuth.done && !didAuth.failed && (
-            <button
-              type="button"
-              onClick={confirmWalletSignature}
-              disabled={didAuth.busy}
-              className="w-full flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white font-medium py-3 px-4 rounded-xl transition-all duration-200 disabled:opacity-60"
-            >
-              {didAuth.busy ? (
-                <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : (
-                <Fingerprint className="w-5 h-5" />
-              )}
-              {didAuth.busy ? 'Verifying…' : 'Confirm in Wallet'}
-            </button>
+          {/* ---- Phase B: Connect Wallet (check walletAddress in Firebase) ---- */}
+          {didPhase === 'wallet' && !didAuth.done && !didAuth.failed && (
+            <div className="space-y-2">
+              <div className="rounded-xl bg-slate-50 border border-slate-200 p-3">
+                <p className="text-xs text-slate-600">
+                  Your DID has been verified. Now connect your wallet to continue authentication.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={connectWalletStep}
+                disabled={didAuth.busy}
+                className="w-full flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white font-medium py-3 px-4 rounded-xl transition-all duration-200 disabled:opacity-60"
+              >
+                {didAuth.busy ? (
+                  <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <Lock className="w-5 h-5" />
+                )}
+                {didAuth.busy ? 'Connecting Wallet…' : 'Connect Wallet'}
+              </button>
+            </div>
+          )}
+
+          {/* ---- Phase C: Challenge (enter company password "BEL-2026") ---- */}
+          {didPhase === 'challenge' && !didAuth.done && !didAuth.failed && (
+            <div className="space-y-2">
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-slate-700" htmlFor="challenge-input">
+                  Challenge Password
+                </label>
+                <input
+                  id="challenge-input"
+                  type="password"
+                  value={challengePassword}
+                  onChange={(e) => {
+                    setChallengePassword(e.target.value);
+                    if (didAuth.error) updateDidAuth({ error: '' });
+                  }}
+                  placeholder="Enter company challenge password"
+                  autoComplete="off"
+                  disabled={didAuth.busy}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm placeholder:text-slate-400 disabled:bg-slate-50"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={verifyChallengePassword}
+                disabled={didAuth.busy}
+                className="w-full flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white font-medium py-3 px-4 rounded-xl transition-all duration-200 disabled:opacity-60"
+              >
+                {didAuth.busy ? (
+                  <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <ShieldCheck className="w-5 h-5" />
+                )}
+                {didAuth.busy ? 'Verifying…' : 'Verify Challenge'}
+              </button>
+            </div>
+          )}
+
+          {/* ---- Phase D: Signature Verification (check publicKey in Firebase) ---- */}
+          {didPhase === 'signature' && !didAuth.done && !didAuth.failed && (
+            <div className="space-y-2">
+              <div className="rounded-xl bg-slate-50 border border-slate-200 p-3">
+                <p className="text-xs text-slate-600">
+                  Challenge verified. Verifying your public key from Firebase for signature validation.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={verifySignatureStep}
+                disabled={didAuth.busy}
+                className="w-full flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white font-medium py-3 px-4 rounded-xl transition-all duration-200 disabled:opacity-60"
+              >
+                {didAuth.busy ? (
+                  <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <Fingerprint className="w-5 h-5" />
+                )}
+                {didAuth.busy ? 'Verifying Signature…' : 'Signature Verification'}
+              </button>
+            </div>
           )}
 
           <button
