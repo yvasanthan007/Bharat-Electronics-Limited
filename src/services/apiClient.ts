@@ -3,7 +3,7 @@
  * Enterprise HTTP Client configured for communicating with the BEL Trust Platform Backend.
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000/api/v1';
 
 class ApiClient {
   private baseUrl: string;
@@ -103,6 +103,23 @@ class ApiClient {
     list: () => this.request('/wallets'),
     connect: (data: { address: string; label?: string }) =>
       this.request('/wallets/connect', { method: 'POST', body: JSON.stringify(data) }),
+  };
+
+  // DID Endpoints
+  public did = {
+    create: (data: any) =>
+      this.request('/did/create', { method: 'POST', body: JSON.stringify(data) }),
+    me: () => this.request('/did/me'),
+    get: (did: string) => this.request(`/did/${encodeURIComponent(did)}`),
+    challenge: (data: { did?: string; email?: string; identifier?: string; password?: string }) =>
+      this.request('/did/challenge', { method: 'POST', body: JSON.stringify(data) }),
+    authenticate: (data: { nonce: string; signature: string; did?: string }) =>
+      this.request('/did/authenticate', { method: 'POST', body: JSON.stringify(data) }),
+    verify: (did: string) =>
+      this.request('/did/verify', { method: 'POST', body: JSON.stringify({ did }) }),
+    revoke: (did: string, reason?: string) =>
+      this.request('/did/revoke', { method: 'POST', body: JSON.stringify({ did, reason }) }),
+    list: () => this.request('/did'),
   };
 
   // Health

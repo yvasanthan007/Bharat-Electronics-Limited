@@ -15,6 +15,7 @@ model User {
   isActive      Boolean        @default(true)
   roleId        String
   role          Role           @relation(fields: [roleId], references: [id])
+  didIdentity   DIDIdentity?
   wallets       Wallet[]
   notifications Notification[]
   auditLogs     AuditLog[]
@@ -158,4 +159,23 @@ model Session {
   isActive  Boolean  @default(true)
   expiresAt DateTime
   createdAt DateTime @default(now())
+}
+
+model DIDIdentity {
+  id            String    @id @default(uuid())
+  userId        String    @unique
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  did           String    @unique
+  method        String    @default("ethr")
+  walletAddress String    @unique
+  publicKey     String
+  status        String    @default("ACTIVE")
+  documentJson  String?
+  createdAt     DateTime  @default(now())
+  verifiedAt    DateTime?
+  revokedAt     DateTime?
+  updatedAt     DateTime  @updatedAt
+
+  @@index([did])
+  @@index([walletAddress])
 }

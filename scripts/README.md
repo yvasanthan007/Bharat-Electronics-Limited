@@ -58,4 +58,71 @@ $env:FIREBASE_UPLOAD_MODE="live"; python firestore_upload.py
 > ⚠️ We could **not** write to the live project from this environment because
 > no service-account key was provided and Anonymous Auth was disabled
 > (`ADMIN_ONLY_OPERATION`). The pipeline was fully validated against the
+
+---
+
+# Idempotent 500-Employee Import (`import_employees_500.py`)
+
+Imports `BEL_Employee_Dataset_500.xlsx` (sheet **Employees**, 500 records) into
+the **`employees`** collection of project **bel-sih-b9392**. This is the
+dataset used by the application's live database — Firestore, not Excel, is
+the app's source of truth.
+
+## Guarantees
+
+| Property | How |
+|----------|-----|
+| **Safe to re-run (idempotent)** | Document ID = `Employee ID` (e.g. `BEL1001`) — re-running updates the same docs, never duplicates. |
+| **Never overwrites DID data** | Existing `did`, `walletAddress`, `walletId`, `publicKey`, `didCreatedAt`, `didStatus` set by the Admin UI win over Excel values. |
+| **No private keys** | Credential-like columns are rejected; only public DID/wallet fields are written. |
+| **Fields mirror Excel columns** | camelCase: `employeeId, employeeName, email, phone, department, designation, role, location, joiningYear, employmentStatus, didStatus, did, walletAddress` + aliases `name`/`status`. |
+| **Config from the project** | Reads `VITE_FIREBASE_PROJECT_ID` / `VITE_FIREBASE_API_KEY` from `.env.local`. Admin credentials are never hardcoded — pass a service-account key via CLI only. |
+
+## Usage
+
+```powershell
+# Parse + report only (no writes)
+python scripts\import_employees_500.py --dry-run
+
+# Import to live Firestore (auto-target: emulator if running, else live)
+python scripts\import_employees_500.py
+
+# Explicit service-account (admin-level) writes
+python scripts\import_employees_500.py --service-account path\to\adminsdk.json
+
+# Custom workbook / sheet
+python scripts\import_employees_500.py --excel path\to\file.xlsx --sheet Employees
+```
+
+Auth strategy on live: starts unauthenticated (public reads); if a write is
+denied it transparently falls back to anonymous sign-in, or use
+`--service-account`. The script verifies sample documents at the end
+(`created/updated/unchanged` counts + retrieval check).
+
+## Viewing the imported data
+
+**Option 1 — Firebase Console (visual)**
+
+1. https://console.firebase.google.com → project **bel-sih-b9392**
+2. Build → **Firestore Database**
+3. Click the **`employees`** collection → browse all documents
+   (`BEL1001`…`BEL1500`). Click a document to see its fields.
+
+**Option 2 — `view_employees.py` (fast terminal viewer)**
+
+```powershell
+python scripts\view_employees.py                    # first 15 employees (table)
+python scripts\view_employees.py --limit 30         # first 30
+python scripts\view_employees.py --id BEL1001       # one employee, all fields
+python scripts\view_employees.py --role Admin       # filter by role
+python scripts\view_employees.py --search singh     # search name/email/dept
+python scripts\view_employees.py --count            # total count only
+```
+
+**Option 3 — `verify_import.py` (full verification)**
+
+```powershell
+python scripts\verify_import.py   # count + role distribution + field samples
+```
+
 > local emulator (272/272 documents).

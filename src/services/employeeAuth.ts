@@ -4,6 +4,7 @@ import { getCredentialsByHolder, storeCredential } from './credentials';
 import { recordBlockchainEvent } from '../lib/did/blockchainLayer';
 import { createMockVC, type VerifiableCredential } from '../lib/did/vcEngine';
 import { BEL_ISSUER_DID, type DIDIdentity } from '../data/mockDIDData';
+import { getIdentities } from './identities';
 import {
   getDemoWalletAddress,
   getDemoWalletPublicKey,
@@ -14,6 +15,11 @@ import {
   personalSign,
   signWithDemoWallet,
 } from './wallet';
+import {
+  hasWalletKey,
+  signChallengeWithWalletKey,
+} from './secureKeyStorage';
+import { getEmployeeFromFirestore, type FirestoreEmployee } from './firebaseEmployeeService';
 
 /**
  * Employee DID login service (challenge / response).
@@ -35,6 +41,29 @@ import {
 const CHALLENGE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000; // 8 hours
 const SESSION_KEY = 'bel_employee_session';
+
+function firestoreEmployeeToDIDIdentity(emp: FirestoreEmployee): DIDIdentity {
+  const status = emp.status === 'Verified' ? 'Verified'
+    : emp.status === 'Revoked' ? 'Revoked'
+    : 'Pending';
+  return {
+    id: emp.employeeId,
+    name: emp.name || (emp.email ? emp.email.split('@')[0] : 'Personnel'),
+    did: emp.did.length > 20
+      ? `${emp.did.substring(0, 12)}...${emp.did.substring(emp.did.length - 4)}`
+      : emp.did,
+    fullDID: emp.did,
+    walletAddress: emp.walletAddress,
+    publicKey: emp.publicKey,
+    role: emp.role,
+    department: emp.department || '',
+    status,
+    createdOn: (emp.createdAt || '').split('T')[0] || new Date().toISOString().split('T')[0],
+    lastActive: 'Just now',
+    createdAt: emp.createdAt || new Date().toISOString(),
+    verifiedAt: emp.createdAt || new Date().toISOString(),
+  };
+}
 
 export interface EmployeeSession {
   token: string;
@@ -84,18 +113,68 @@ function randomToken(): string {
 
 /* ------------------------------ challenge request ---------------------------- */
 
-/** Resolves a DID (full, short-display or bare 0x address) to its identity. */
-function resolveIdentity(didOrAddress: string): DIDIdentity | undefined {
+/** Resolves a DID (full, short-display, bare 0x address, name or email) to its identity. */
+async function resolveIdentity(didOrAddress: string): Promise<DIDIdentity | undefined> {
   const input = didOrAddress.trim();
   const all = getAllDIDIdentities();
 
   if (/^0x[0-9a-f]{40}$/i.test(input)) {
-    return all.find((d) => d.walletAddress.toLowerCase() === input.toLowerCase());
+    const direct = all.find((d) => d.walletAddress.toLowerCase() === input.toLowerCase());
+    if (direct) return direct;
   }
   const needle = input.toLowerCase();
-  return all.find(
-    (d) => d.fullDID.toLowerCase() === needle || d.did.toLowerCase() === needle
+  const directMatch = all.find(
+    (d) =>
+      d.fullDID.toLowerCase() === needle ||
+      d.did.toLowerCase() === needle ||
+      d.name.toLowerCase() === needle ||
+      (d as any).email?.toLowerCase() === needle ||
+      d.fullDID.toLowerCase().includes(needle) ||
+      d.did.toLowerCase().includes(needle)
   );
+  if (directMatch) return directMatch;
+
+  // Also check identities created via CreateIdentityModal
+  const roster = getIdentities();
+  const rosterMatch = roster.find(
+    (i) =>
+      i.did.toLowerCase() === needle ||
+      i.name.toLowerCase() === needle ||
+      i.email.toLowerCase() === needle ||
+      i.employeeId.toLowerCase() === needle ||
+      i.did.toLowerCase().includes(needle)
+  );
+
+  if (rosterMatch) {
+    const fullDID = rosterMatch.did.startsWith('did:') ? rosterMatch.did : `did:bel:sov:${rosterMatch.did}`;
+    return {
+      id: rosterMatch.id,
+      name: rosterMatch.name,
+      did: rosterMatch.did,
+      fullDID,
+      walletAddress: rosterMatch.walletAddress,
+      publicKey: rosterMatch.publicKey,
+      role: rosterMatch.role,
+      department: rosterMatch.department,
+      status: rosterMatch.status === 'Verified' ? 'Verified' : 'Pending',
+      createdOn: rosterMatch.createdOn,
+      createdAt: new Date().toISOString(),
+      verifiedAt: new Date().toISOString(),
+      lastActive: rosterMatch.lastActive,
+    };
+  }
+
+  // Fallback: check Firebase Firestore (authoritative source for DID + public key)
+  try {
+    const emp = await getEmployeeFromFirestore(input);
+    if (emp) {
+      return firestoreEmployeeToDIDIdentity(emp);
+    }
+  } catch {
+    // Firestore unavailable — fall back to local data only
+  }
+
+  return undefined;
 }
 
 /**
@@ -104,10 +183,10 @@ function resolveIdentity(didOrAddress: string): DIDIdentity | undefined {
  * expiring challenge bound to that DID's registered wallet.
  * Throws when the DID is unknown or not verified/active.
  */
-export function requestLoginChallengeByDID(
+export async function requestLoginChallengeByDID(
   didOrAddress: string
-): { challenge: string; nonce: string; did: string } {
-  const identity = resolveIdentity(didOrAddress);
+): Promise<{ challenge: string; nonce: string; did: string }> {
+  const identity = await resolveIdentity(didOrAddress);
 
   if (!identity) {
     throw new Error('Unknown DID — no such employee in the registry.');
@@ -150,36 +229,67 @@ export function requestLoginChallengeByDID(
  * Employee Wallet / Secure Key Storage — step 3 of the flow.
  * Locates key material capable of signing FOR the given DID and produces an
  * EIP-191 signature over the backend challenge:
- *   1. Browser wallet (MetaMask) holding the DID's account → personal_sign.
- *   2. Deterministic demo secure-key-storage (prototype fallback) → local ECDSA.
+ *   1. Browser secure key storage (IndexedDB) holding the DID's private key → ethers.Wallet signMessage
+ *   2. Real browser wallet (MetaMask) holding the DID's account → personal_sign.
+ *   3. Deterministic demo secure-key-storage (prototype fallback) → local ECDSA.
  * The private key never leaves the wallet / memory.
  */
 export async function signChallengeForDID(
   didOrAddress: string,
   challenge: string
 ): Promise<string> {
-  const identity = resolveIdentity(didOrAddress);
+  const identity = await resolveIdentity(didOrAddress);
   if (!identity) {
     throw new Error('Unknown DID — no key material to sign with.');
   }
   const target = identity.walletAddress.toLowerCase();
 
-  // 1. Real browser wallet that currently holds this DID's account
+  // 1. Try the browser's secure key storage (IndexedDB) FIRST — this is where
+  //    the employee's private key is persisted when Admin creates their DID.
+  try {
+    if (await hasWalletKey(identity.fullDID)) {
+      return await signChallengeWithWalletKey(identity.fullDID, challenge);
+    }
+  } catch {
+    // Fall through to external wallet / demo fallback
+  }
+
+  // 2. Real browser wallet that currently holds this DID's account
   if (hasBrowserWallet()) {
-    const accounts = await getBrowserWalletAccounts();
-    const match = accounts.find((a) => a.toLowerCase() === target);
-    if (match) {
-      return personalSign(match, challenge);
+    try {
+      const accounts = await getBrowserWalletAccounts();
+      const match = accounts.find((a) => a.toLowerCase() === target);
+      if (match) {
+        return await personalSign(match, challenge);
+      }
+    } catch {
+      // Fallback
     }
   }
 
-  // 2. Simulated Secure Key Storage for the pre-provisioned demo employee
+  // 3. Simulated Secure Key Storage for the pre-provisioned demo employee
   if (target === getDemoWalletAddress().toLowerCase()) {
     return signWithDemoWallet(challenge);
   }
 
+  // 4. For any registered identity created with a DID keypair, derive deterministic signature
+  if (identity.walletAddress) {
+    try {
+      const seed = ethers.id(`bel-key-storage:${identity.fullDID.toLowerCase()}`);
+      const derivedWallet = new ethers.Wallet(seed);
+      if (derivedWallet.address.toLowerCase() === target) {
+        return await derivedWallet.signMessage(challenge);
+      }
+    } catch {
+      // Fall through to the fail-closed guard below
+    }
+  }
+
+  // SECURITY (fail-closed): never sign with an unrelated key. A signature from
+  // any other private key can never satisfy server-side verification against
+  // the DID's registered public key, so refuse loudly instead.
   throw new Error(
-    `No secure key storage available for ${identity.did}. Connect a wallet holding ${target.substring(0, 10)}… or use the demo DID.`
+    `No secure key storage available for ${identity.did}. This browser's wallet does not hold the private key for this DID — sign in on the device where the DID was issued, or connect the wallet holding ${target.substring(0, 10)}…`
   );
 }
 
@@ -281,6 +391,10 @@ export async function completeLoginChallenge(
   if (!record) {
     return fail('Login challenge not found or already consumed. Please restart the sign-in.');
   }
+  if (record.used) {
+    challenges.delete(nonce);
+    return fail('Challenge has already been used. Please restart the sign-in.');
+  }
   if (Date.now() > record.expiresAt) {
     challenges.delete(nonce);
     return fail('Login challenge expired. Please restart the sign-in.');
@@ -302,7 +416,7 @@ export async function completeLoginChallenge(
     return fail('Signature malformed — verification failed.');
   }
 
-  const regIdentity = resolveIdentity(record.did);
+  const regIdentity = await resolveIdentity(record.did);
   const storedPub = regIdentity?.publicKey;
   let docKeyAddress: string | null = null;
   if (storedPub) {
@@ -314,6 +428,7 @@ export async function completeLoginChallenge(
   }
 
   challenges.delete(nonce); // single-use — replay impossible past this point
+  record.used = true;
 
   // Signature vs DID-document public key
   if (docKeyAddress && recovered !== docKeyAddress) {
@@ -448,6 +563,15 @@ export function clearEmployeeSession(): void {
   } catch {
     /* storage unavailable */
   }
+}
+
+/**
+ * Persists an authenticated employee session (opaque 8h token).
+ * Used by the DID challenge/response login once server-side verification
+ * has succeeded. The session carries no secrets and no private keys.
+ */
+export function persistEmployeeSession(session: EmployeeSession): void {
+  saveSession(session);
 }
 
 /** True when a valid employee session exists. */

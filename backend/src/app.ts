@@ -47,6 +47,7 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
 
 // API routes
 app.use('/api/v1', router);
+app.use('/api', router);
 
 // 404 handler
 app.use((req: Request, res: Response) => {
@@ -56,4 +57,6 @@ app.use((req: Request, res: Response) => {
 // Centralized error handler (must be last)
 app.use(errorHandler);
 
+export const createApp = (): Express => app;
+export { app };
 export default app;

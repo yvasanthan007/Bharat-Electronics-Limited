@@ -1,15 +1,58 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
+
     // Helper function to check if user is authenticated
     function isAuthenticated() {
       return request.auth != null;
     }
-    
+
     // Helper function to check if user has Admin role in custom claims or user doc
     function isAdmin() {
       return isAuthenticated() && (request.auth.token.role == 'Admin' || request.auth.token.admin == true);
+    }
+
+    // Helper function to forbid private keys anywhere in Firestore
+    function hasPrivateKey(data) {
+      return data.keys().hasAny([
+        'privateKey',
+        'private_key',
+        '_privateKeyForSigning',
+        'secretKey',
+        'secret_key',
+        'seedPhrase',
+        'mnemonic',
+        'privKey',
+        'privateKeyHex'
+      ]);
+    }
+
+    // EMPLOYEES: Decentralized Identifier (DID) Registry
+    // Stores DID, public key, role, and email for each employee.
+    // Private keys are NEVER stored in Firebase.
+    // Records are seeded from the Excel dataset (which may not have a DID
+    // yet), so create only requires the core profile fields. App-issued
+    // identities always include did/publicKey (validated in code).
+    // Users cannot modify their own DID/publicKey arbitrarily.
+    // Only authenticated Admin/backend operations can create/update employee identity records.
+    match /employees/{employeeId} {
+      allow read: if true; // Needed for login challenge resolution and DID verification
+      allow create: if isAuthenticated() &&
+                      !hasPrivateKey(request.resource.data) &&
+                      request.resource.data.role is string &&
+                      request.resource.data.email is string;
+      allow update: if isAuthenticated() &&
+                      !hasPrivateKey(request.resource.data) &&
+                      (!('did' in request.resource.data) || request.resource.data.did == resource.data.did) &&
+                      (!('publicKey' in request.resource.data) || request.resource.data.publicKey == resource.data.publicKey);
+      allow delete: if false; // Tamper-proof employee registry
+    }
+
+    // USERS: Authentication Profiles
+    match /users/{userId} {
+      allow read: if true;
+      allow create, update: if !hasPrivateKey(request.resource.data);
+      allow delete: if false;
     }
 
     // AUDIT LOGS: Append-Only Immutable Ledger
@@ -32,7 +75,7 @@ service cloud.firestore {
       allow create: if true; // In production: if isAdmin()
       allow update: if true; // In production: if isAdmin()
       allow delete: if false; // Preserve audit trail
-      
+
       match /functions/{funcId} {
         allow read: if true;
         allow write: if true; // In production: if isAdmin()
@@ -45,6 +88,30 @@ service cloud.firestore {
       allow read: if true;
       allow create: if true;
       allow update: if false;
+      allow delete: if false;
+    }
+
+    // DID AUTH CHALLENGES: single-use challenge/response nonces for employee login.
+    // A challenge document contains NO secrets (public challenge text + DID +
+    // employeeID + timestamps + used flag). Anyone may request a login
+    // challenge (mirrors a public auth endpoint); authentication strength comes
+    // from server-side signature verification against the employee's public key
+    // and the single-use consume below. Private keys are forbidden; challenges
+    // may ONLY be flipped used:false→true (replay protection) and never deleted.
+    match /didChallenges/{challengeId} {
+      allow read: if true;
+      allow create: if !hasPrivateKey(request.resource.data)
+                    && request.resource.data.challenge is string
+                    && request.resource.data.DID is string
+                    && request.resource.data.employeeID is string
+                    && request.resource.data.expiresAt is string
+                    && request.resource.data.used == false;
+      allow update: if resource.data.used == false
+                    && request.resource.data.used == true
+                    && request.resource.data.challenge == resource.data.challenge
+                    && request.resource.data.DID == resource.data.DID
+                    && request.resource.data.employeeID == resource.data.employeeID
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['used', 'usedAt']);
       allow delete: if false;
     }
   }

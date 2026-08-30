@@ -1,13 +1,13 @@
 import { useState } from 'react';
-import { 
-  X, CheckCircle2, Wand2, Sparkles, UserCheck 
+import {
+  X, CheckCircle2, Wand2, Sparkles, UserCheck
 } from 'lucide-react';
-import { 
-  generateDid, 
-  type Identity, 
-  type SecurityClearance, 
-  type IdentityStatus 
+import {
+  type Identity,
+  type SecurityClearance,
+  type IdentityStatus
 } from '../services/identities';
+import { createDIDIdentity } from '../services/did';
 
 interface CreateIdentityModalProps {
   isOpen: boolean;
@@ -74,7 +74,7 @@ export default function CreateIdentityModal({
   const [walletAddress, setWalletAddress] = useState('');
   const [status, setStatus] = useState<IdentityStatus>('Verified');
   const [avatarUrl, setAvatarUrl] = useState('https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150');
-  
+
   const [step, setStep] = useState<'form' | 'success'>('form');
   const [isLoading, setIsLoading] = useState(false);
   const [createdDid, setCreatedDid] = useState<string>('');
@@ -88,7 +88,7 @@ export default function CreateIdentityModal({
     setSecurityClearance(preset.securityClearance);
     setKeyType(preset.keyType);
     setAvatarUrl(preset.avatar);
-    
+
     const formattedEmail = preset.name
       .toLowerCase()
       .replace(/dr\.|wing commander|major/g, '')
@@ -97,28 +97,43 @@ export default function CreateIdentityModal({
     setEmail(formattedEmail);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
-    setTimeout(() => {
-      const id = `bel-id-${Date.now()}`;
-      const generatedDidStr = generateDid();
-      const generatedWallet = walletAddress || '0x' + Array.from({ length: 40 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
-      const generatedPubKey = '0x04' + Array.from({ length: 42 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+    try {
+      const targetEmpId = employeeId || `BEL-DEF-${Math.floor(1000 + Math.random() * 9000)}`;
+      const targetEmail = email || `${name.toLowerCase().replace(/\s+/g, '.')}@bel.co.in`;
+      const targetName = name || 'Defense Engineer';
+
+      // 1. Generate DID + cryptographic key pair
+      // 2. Persist DID + public key in Firebase Firestore (NEVER private key)
+      // 3. Store private key securely ONLY in employee browser wallet (IndexedDB)
+      const { identity: didIdentity, generated } = await createDIDIdentity({
+        name: targetName,
+        employeeId: targetEmpId,
+        email: targetEmail,
+        department,
+        role,
+        platform: role,
+        securityClearance,
+        keyType,
+        status,
+        walletAddress: walletAddress || undefined,
+      });
 
       const newIdentity: Identity = {
-        id,
-        name: name || 'Defense Engineer',
-        did: generatedDidStr,
-        employeeId: employeeId || `BEL-DEF-${Math.floor(1000 + Math.random() * 9000)}`,
-        email: email || `${name.toLowerCase().replace(/\s+/g, '.')}@bel.co.in`,
+        id: didIdentity.id,
+        name: targetName,
+        did: didIdentity.fullDID,
+        employeeId: targetEmpId,
+        email: targetEmail,
         role,
         department,
         status,
         securityClearance,
-        walletAddress: generatedWallet,
-        publicKey: generatedPubKey,
+        walletAddress: generated.walletAddress,
+        publicKey: generated.publicKey,
         keyType,
         avatar: avatarUrl,
         createdOn: new Date().toISOString().split('T')[0],
@@ -126,11 +141,14 @@ export default function CreateIdentityModal({
         verifiableCredentialsCount: securityClearance === 'Top Secret (SCI)' ? 6 : 3,
       };
 
-      setCreatedDid(generatedDidStr);
+      setCreatedDid(didIdentity.fullDID);
       onAddIdentity(newIdentity);
-      setIsLoading(false);
       setStep('success');
-    }, 700);
+    } catch (err) {
+      console.error('Failed to create and register DID identity:', err);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleResetAndClose = () => {

@@ -8,6 +8,7 @@ import transactionsRoutes from './transaction.routes';
 import analyticsRoutes from '../modules/analytics/analytics.routes';
 import walletsRoutes from '../modules/wallets/wallets.routes';
 import notificationsRoutes from '../modules/notifications/notifications.routes';
+import didRoutes from '../modules/did/did.routes';
 
 const router = Router();
 
@@ -25,5 +26,6 @@ router.use('/transactions', transactionsRoutes);
 router.use('/analytics', analyticsRoutes);
 router.use('/wallets', walletsRoutes);
 router.use('/notifications', notificationsRoutes);
+router.use('/did', didRoutes);
 
 export default router;

@@ -13,6 +13,21 @@ export interface MockUser {
   updatedAt: Date;
 }
 
+export interface MockDIDIdentity {
+  id: string;
+  userId: string;
+  did: string;
+  method: string;
+  walletAddress: string;
+  publicKey: string;
+  status: string;
+  documentJson?: string;
+  createdAt: Date;
+  verifiedAt?: Date;
+  revokedAt?: Date;
+  updatedAt: Date;
+}
+
 export interface MockWallet {
   id: string;
   userId: string;
@@ -93,6 +108,7 @@ export interface MockAuditLog {
 
 class MockDataStore {
   public users: MockUser[] = [];
+  public dids: MockDIDIdentity[] = [];
   public wallets: MockWallet[] = [];
   public assets: MockAsset[] = [];
   public transactions: MockTransaction[] = [];
@@ -156,6 +172,87 @@ class MockDataStore {
         createdAt: new Date('2026-03-01T11:00:00Z'),
         updatedAt: new Date('2026-08-22T16:45:00Z'),
       },
+    ];
+
+    this.dids = [
+      {
+        id: 'did-01',
+        userId: 'usr-admin-01',
+        did: 'did:bel:7f82e391a3b909f1',
+        method: 'ethr',
+        walletAddress: '0x7f82c4412f9e110b77c5d41a99b21a8d76e0a3b9',
+        publicKey: '0x04f32a8849b219e88bca120934812f890192847120a',
+        status: 'ACTIVE',
+        documentJson: JSON.stringify({
+          '@context': ['https://www.w3.org/ns/did/v1', 'https://w3id.org/security/suites/secp256k1-2019/v1'],
+          id: 'did:bel:7f82e391a3b909f1',
+          controller: 'did:bel:7f82e391a3b909f1',
+          verificationMethod: [{
+            id: 'did:bel:7f82e391a3b909f1#controller',
+            type: 'EcdsaSecp256k1RecoveryMethod2020',
+            controller: 'did:bel:7f82e391a3b909f1',
+            publicKeyHex: '0x04f32a8849b219e88bca120934812f890192847120a',
+            blockchainAccountId: 'eip155:1:0x7f82c4412f9e110b77c5d41a99b21a8d76e0a3b9'
+          }],
+          authentication: ['did:bel:7f82e391a3b909f1#controller'],
+          assertionMethod: ['did:bel:7f82e391a3b909f1#controller']
+        }),
+        createdAt: new Date('2026-01-15T08:00:00Z'),
+        verifiedAt: new Date('2026-01-15T08:05:00Z'),
+        updatedAt: new Date('2026-08-24T10:00:00Z'),
+      },
+      {
+        id: 'did-02',
+        userId: 'usr-eng-02',
+        did: 'did:bel:4a11c899bc019283',
+        method: 'ethr',
+        walletAddress: '0x33b81920acdef8719204918239014abcef981023',
+        publicKey: '0x02b8812903481290381203948102938401928340192',
+        status: 'ACTIVE',
+        documentJson: JSON.stringify({
+          '@context': ['https://www.w3.org/ns/did/v1', 'https://w3id.org/security/suites/secp256k1-2019/v1'],
+          id: 'did:bel:4a11c899bc019283',
+          controller: 'did:bel:4a11c899bc019283',
+          verificationMethod: [{
+            id: 'did:bel:4a11c899bc019283#controller',
+            type: 'EcdsaSecp256k1RecoveryMethod2020',
+            controller: 'did:bel:4a11c899bc019283',
+            publicKeyHex: '0x02b8812903481290381203948102938401928340192',
+            blockchainAccountId: 'eip155:1:0x33b81920acdef8719204918239014abcef981023'
+          }],
+          authentication: ['did:bel:4a11c899bc019283#controller'],
+          assertionMethod: ['did:bel:4a11c899bc019283#controller']
+        }),
+        createdAt: new Date('2026-02-10T09:30:00Z'),
+        verifiedAt: new Date('2026-02-10T09:35:00Z'),
+        updatedAt: new Date('2026-08-23T14:20:00Z'),
+      },
+      {
+        id: 'did-03',
+        userId: 'usr-aud-03',
+        did: 'did:bel:99a014bcfe819230',
+        method: 'ethr',
+        walletAddress: '0x6d44c8e1a2993481273941bca908234120341234',
+        publicKey: '0x04cc88239401928340192830192847120a881290348',
+        status: 'ACTIVE',
+        documentJson: JSON.stringify({
+          '@context': ['https://www.w3.org/ns/did/v1', 'https://w3id.org/security/suites/secp256k1-2019/v1'],
+          id: 'did:bel:99a014bcfe819230',
+          controller: 'did:bel:99a014bcfe819230',
+          verificationMethod: [{
+            id: 'did:bel:99a014bcfe819230#controller',
+            type: 'EcdsaSecp256k1RecoveryMethod2020',
+            controller: 'did:bel:99a014bcfe819230',
+            publicKeyHex: '0x04cc88239401928340192830192847120a881290348',
+            blockchainAccountId: 'eip155:1:0x6d44c8e1a2993481273941bca908234120341234'
+          }],
+          authentication: ['did:bel:99a014bcfe819230#controller'],
+          assertionMethod: ['did:bel:99a014bcfe819230#controller']
+        }),
+        createdAt: new Date('2026-03-01T11:00:00Z'),
+        verifiedAt: new Date('2026-03-01T11:05:00Z'),
+        updatedAt: new Date('2026-08-22T16:45:00Z'),
+      }
     ];
 
     this.wallets = [
