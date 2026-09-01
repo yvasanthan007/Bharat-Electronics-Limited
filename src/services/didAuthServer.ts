@@ -141,7 +141,7 @@ export async function issueDidChallenge(employee: FirestoreEmployee): Promise<Is
     nonce,
   };
 
-  const challengeRef = doc(db, COLLECTION);
+  const challengeRef = doc(collection(db, COLLECTION));
   try {
     await setDoc(challengeRef, challengeDoc);
   } catch {

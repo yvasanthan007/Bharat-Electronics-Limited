@@ -18,8 +18,8 @@ import { ethers } from 'ethers';
  *   • Every check below must pass or authentication is rejected (fail-closed).
  */
 
-/** Challenge lifetime — short-lived, single-use. */
-export const DID_CHALLENGE_TTL_MS = 5 * 60 * 1000;
+/** Challenge lifetime — short-lived, single-use (60 s, per security spec). */
+export const DID_CHALLENGE_TTL_MS = 60 * 1000;
 
 /** Shape of the Firestore `didChallenges/{challengeId}` document. */
 export interface DidChallengeDoc {
