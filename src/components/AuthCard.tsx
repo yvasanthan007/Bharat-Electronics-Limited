@@ -22,6 +22,12 @@ import {
   issueDidChallenge,
   verifyDidChallengeResponse,
 } from '../services/didAuthServer';
+import {
+  cloudVerifyDID,
+  cloudCreateChallenge,
+  cloudVerifySignature,
+  type CloudSession,
+} from '../services/didCloudFunctions';
 import { auth, db } from '../lib/firebase';
 import {
   createUserWithEmailAndPassword,
@@ -30,6 +36,8 @@ import {
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { findEmployeeByIdOrEmail, getEmployeeFromFirestore, type FirestoreEmployee } from '../services/firebaseEmployeeService';
 import { getDashboardRouteForRole } from '../services/employeeRbac';
+import { ethers } from 'ethers';
+
 
 /** Map Firebase Auth error codes to human-friendly messages. */
 const getFirebaseErrorMessage = (err: unknown): string => {
@@ -147,8 +155,9 @@ const AuthCard = () => {
   const [loginPhase, setLoginPhase] = useState<DidLoginPhase>('idle');
   const [outcome, setOutcome] = useState<OutcomeView | null>(null);
   const [didAuth, setDidAuth] = useState<DidAuthState | null>(null);
-  const [challengePassword, setChallengePassword] = useState('');
   const [didPhase, setDidPhase] = useState<'did' | 'wallet' | 'challenge' | 'signature' | 'done'>('did');
+  /** TEMPORARY dev toggle — signs the challenge with a RANDOM (attacker) key. */
+  const [simulateAttacker, setSimulateAttacker] = useState(false);
   const navigate = useNavigate();
 
   const isDidBusy = loginPhase !== 'idle' && loginPhase !== 'success';
@@ -261,7 +270,7 @@ const AuthCard = () => {
    */
   const startDidAuthAfterCredentials = async (uid: string, email: string) => {
     setDidInput('');
-    setChallengePassword('');
+    setSimulateAttacker(false);
     setDidPhase('did');
     setDidAuth({
       steps: newDidAuthSteps(),
@@ -323,6 +332,29 @@ const AuthCard = () => {
 
     updateDidAuth({ busy: true, error: '' });
 
+    // ------------------------------------------------------------------
+    // AUTHORITATIVE PATH — Cloud Function `verifyDID`: the verified Firebase
+    // Auth context (UID/token email) is resolved SERVER-SIDE to the employee
+    // record, which must already carry this DID. Client claims are ignored.
+    // ------------------------------------------------------------------
+    const cloud = await cloudVerifyDID(did);
+    if (cloud.ok) {
+      markDidStep(
+        DID_STEPS.DID_VERIFY,
+        'passed',
+        `DID verified against Firebase by Cloud Function · ${cloud.data.did}`
+      );
+      updateDidAuth({ busy: false, did: cloud.data.did });
+      setDidPhase('wallet');
+      return;
+    }
+    if (!cloud.unavailable) {
+      updateDidAuth({ busy: false });
+      failDidAuth(DID_STEPS.DID_VERIFY, cloud.error);
+      return;
+    }
+    console.warn('[AuthCard] Cloud Function verifyDID unreachable — using local verifier.');
+
     try {
       await ensureDemoEmployeeRegistered();
     } catch (demoErr) {
@@ -364,9 +396,9 @@ const AuthCard = () => {
         (authEmployee.did &&
           (authEmployee.did === did ||
             authEmployee.did.toLowerCase() === did.toLowerCase())) ||
-        (authEmployee.employeeID &&
-          matchedEmployee.employeeID &&
-          authEmployee.employeeID === matchedEmployee.employeeID);
+        (authEmployee.employeeId &&
+          matchedEmployee.employeeId &&
+          authEmployee.employeeId === matchedEmployee.employeeId);
       if (!didBelongsToEmployee) {
         updateDidAuth({ busy: false });
         failDidAuth(
@@ -414,26 +446,130 @@ const AuthCard = () => {
   };
 
   /**
-   * STEP 3c — Challenge: user enters the common company password "BEL-2026".
-   * If correct, proceed to signature verification.
+   * STEP 3c — Challenge: request a FRESH, server-generated random one-time
+   * challenge (never the fixed "BEL-2026"). The trusted backend
+   * (`createChallenge` Cloud Function) reads the authenticated Firebase UID
+   * from the Auth context, re-verifies DID↔user ownership + registered wallet,
+   * and issues a CSPRNG nonce that expires in 60 s and is single-use. The
+   * existing connected wallet then signs exactly this challenge.
    */
-  const verifyChallengePassword = async () => {
+  const generateChallengeFromServer = async () => {
     if (!didAuth || didAuth.busy) return;
+    updateDidAuth({ busy: true, error: '' });
 
-    if (challengePassword.trim() !== 'BEL-2026') {
-      updateDidAuth({ error: 'Invalid company password. Please enter the correct challenge password.' });
+    const did = didInput.trim() || didAuth.did || didAuth.employee?.did || '';
+    const walletAddress = (didAuth.employee?.walletAddress || didAuth.employee?.walletId || '').trim();
+
+    // ------------------------------------------------------------------
+    // AUTHORITATIVE PATH — Cloud Function `createChallenge`: the verified
+    // Firebase Auth context (UID, never a client claim) is resolved to the
+    // employee record server-side, and a FRESH CSPRNG one-time challenge
+    // (60 s TTL, single-use) is issued bound to { uid, DID, walletAddress }.
+    // ------------------------------------------------------------------
+    const cloud = await cloudCreateChallenge({ did, walletAddress });
+    if (cloud.ok) {
+      updateDidAuth({
+        busy: false,
+        challengeId: cloud.data.challengeId,
+        challenge: cloud.data.challenge,
+        did: cloud.data.did,
+        expiresAt: cloud.data.expiresAt,
+        error: '',
+      });
+      markDidStep(
+        DID_STEPS.CHALLENGE,
+        'passed',
+        `Server challenge issued (single-use, ${cloud.data.ttlSeconds}s) · expires ${new Date(cloud.data.expiresAt).toLocaleTimeString()}`
+      );
+      setDidPhase('signature');
       return;
     }
+    if (!cloud.unavailable) {
+      updateDidAuth({ busy: false });
+      failDidAuth(DID_STEPS.CHALLENGE, cloud.error);
+      return;
+    }
+    console.warn('[AuthCard] Cloud Function createChallenge unreachable — using local verifier.');
 
-    updateDidAuth({ busy: true, error: '' });
-    markDidStep(DID_STEPS.CHALLENGE, 'passed', 'Challenge password verified');
-    updateDidAuth({ busy: false });
-    setDidPhase('signature');
+    // ------------------------------------------------------------------
+    // FALLBACK (backend offline) — existing local challenge issuance:
+    // real CSPRNG nonce, single-use in Firestore (dev-mode convenience).
+    // ------------------------------------------------------------------
+    try {
+      const employee = didAuth.employee;
+      if (!employee) {
+        updateDidAuth({ busy: false });
+        failDidAuth(DID_STEPS.CHALLENGE, 'No employee record found. Cannot generate challenge.');
+        return;
+      }
+      const issued = await issueDidChallenge(employee);
+      updateDidAuth({
+        busy: false,
+        challengeId: issued.challengeId,
+        challenge: issued.challenge,
+        did: issued.did,
+        expiresAt: issued.expiresAt,
+        error: '',
+      });
+      markDidStep(DID_STEPS.CHALLENGE, 'passed', 'One-time challenge generated (local verifier)');
+      setDidPhase('signature');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Challenge generation failed.';
+      updateDidAuth({ busy: false });
+      failDidAuth(DID_STEPS.CHALLENGE, message);
+    }
   };
 
   /**
-   * STEP 3d — Signature Verification: check if the employee has a publicKey
-   * registered in Firebase. If yes, DID authentication is successful.
+   * Shared completion path — runs ONLY after a verifier (Cloud Function or
+   * the local fallback verifier) has cryptographically validated the wallet
+   * signature. The session role always comes from the verifier (Firebase).
+   */
+  const completeDidAuth = (session: CloudSession, verifiedBy: string) => {
+    markDidStep(
+      DID_STEPS.SIGNATURE,
+      'passed',
+      `Signature verified by ${verifiedBy} · signer == registered wallet`
+    );
+    markDidStep(
+      DID_STEPS.AUTHENTICATED,
+      'passed',
+      'Valid User — DID Authentication Successful'
+    );
+
+    const extras = [
+      session.designation ? `Designation: ${session.designation}` : '',
+      session.department ? `Department: ${session.department}` : '',
+    ]
+      .filter(Boolean)
+      .join(' · ');
+    markDidStep(
+      DID_STEPS.RBAC,
+      'passed',
+      `Role from Firebase: ${session.role}${extras ? ` · ${extras}` : ''} → ${
+        isAdminRole(session.role) ? 'Admin dashboard (/bel)' : 'Employee portal (/user)'
+      }`
+    );
+    markDidStep(DID_STEPS.DASHBOARD, 'active', 'Opening your authorized dashboard…');
+
+    const route = applyDidAuthSession(session, didAuth!.email, didAuth!.authUid);
+    updateDidAuth({ busy: false, done: true, route });
+    setDidPhase('done');
+    window.setTimeout(() => navigate(route), 900);
+  };
+
+  /**
+   * STEP 3d — Signature Verification (cryptographic proof of wallet control).
+   *
+   * The EXISTING wallet signs the server-generated one-time challenge with
+   * its private key (the key NEVER leaves the wallet — only the resulting
+   * signature is submitted). The Cloud Function `verifySignature` then:
+   *   • takes the authenticated Firebase UID from the Auth context,
+   *   • re-reads the challenge + employee record from Firestore,
+   *   • checks UID/DID/wallet bindings, expiry and single-use,
+   *   • recovers the EIP-191 signer and compares it with the public key /
+   *     wallet registered in Firebase,
+   *   • atomically marks the challenge used=true.
    */
   const verifySignatureStep = async () => {
     if (!didAuth || didAuth.busy) return;
@@ -445,58 +581,75 @@ const AuthCard = () => {
       failDidAuth(DID_STEPS.SIGNATURE, 'No employee record found. Cannot verify signature.');
       return;
     }
-
-    // Check if employee has a publicKey in Firebase
-    if (!employee.publicKey || employee.publicKey.trim() === '') {
+    if (!didAuth.challenge || !didAuth.challengeId) {
       updateDidAuth({ busy: false });
       failDidAuth(
         DID_STEPS.SIGNATURE,
-        'No public key found in Firebase for this employee. DID authentication failed.'
+        'No active challenge. Restart the sign-in to get a fresh challenge.'
       );
       return;
     }
 
+    const did = didInput.trim() || didAuth.did || employee.did;
+
     try {
-      markDidStep(DID_STEPS.SIGNATURE, 'passed', 'Public key found in Firebase · Signature verified');
+      // 1. Sign the server challenge. Normally the EXISTING wallet signs (private
+      //    key stays in the wallet). With the TEMPORARY "simulate attacker" dev
+      //    toggle ON, we instead sign with a RANDOM key that does NOT match
+      //    Aditya's registered public key — proving the backend rejects it.
       markDidStep(
-        DID_STEPS.AUTHENTICATED,
-        'passed',
-        'Valid User — DID Authentication Successful'
+        DID_STEPS.SIGNATURE,
+        'active',
+        simulateAttacker
+          ? 'Simulating attacker — signing with a DIFFERENT private key…'
+          : 'Requesting wallet signature…'
       );
+      const signature = simulateAttacker
+        ? await ethers.Wallet.createRandom().signMessage(didAuth.challenge)
+        : await signChallengeForDID(did, didAuth.challenge);
 
-      // Build session from the verified employee record
-      const session = {
-        did: didInput.trim() || employee.did,
-        name: employee.name || employee.employeeName || employee.email.split('@')[0],
-        role: employee.role || 'Employee',
-        employeeId: employee.employeeId || '',
-        walletAddress: employee.walletAddress || employee.walletId || '',
-        email: employee.email,
-        designation: employee.designation,
-        department: employee.department,
-      };
+      const walletAddress = (employee.walletAddress || employee.walletId || '').trim();
 
-      const extras = [
-        session.designation ? `Designation: ${session.designation}` : '',
-        session.department ? `Department: ${session.department}` : '',
-      ]
-        .filter(Boolean)
-        .join(' · ');
-      markDidStep(
-        DID_STEPS.RBAC,
-        'passed',
-        `Role from Firebase: ${session.role}${extras ? ` · ${extras}` : ''} → ${
-          isAdminRole(session.role) ? 'Admin dashboard (/bel)' : 'Employee portal (/user)'
-        }`
-      );
-      markDidStep(DID_STEPS.DASHBOARD, 'active', 'Opening your authorized dashboard…');
+      // 2. AUTHORITATIVE PATH — Cloud Function `verifySignature`.
+      const cloud = await cloudVerifySignature({
+        challengeId: didAuth.challengeId,
+        did,
+        walletAddress,
+        signature,
+      });
+      if (cloud.ok) {
+        if (cloud.data.session) {
+          completeDidAuth(cloud.data.session, 'Cloud Function');
+        } else {
+          updateDidAuth({ busy: false });
+          failDidAuth(DID_STEPS.SIGNATURE, 'DID verification failed.');
+        }
+        return;
+      }
+      if (!cloud.unavailable) {
+        updateDidAuth({ busy: false });
+        failDidAuth(DID_STEPS.SIGNATURE, cloud.error);
+        return;
+      }
+      console.warn('[AuthCard] Cloud Function verifySignature unreachable — using local verifier.');
 
-      const route = applyDidAuthSession(session, didAuth.email, didAuth.authUid);
-      updateDidAuth({ busy: false, done: true, route });
-      setDidPhase('done');
-      window.setTimeout(() => navigate(route), 900);
+      // 3. FALLBACK (backend offline) — existing local verifier: same
+      //    cryptographic checks against the Firebase-stored public key,
+      //    atomic single-use consume, role read from Firebase.
+      const result = await verifyDidChallengeResponse({
+        challengeId: didAuth.challengeId,
+        did,
+        signature,
+      });
+      if (result.success && result.session) {
+        completeDidAuth(result.session, 'local verifier (backend offline)');
+        return;
+      }
+      updateDidAuth({ busy: false });
+      failDidAuth(DID_STEPS.SIGNATURE, result.error || 'DID verification failed.');
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'DID verification failed.';
+      const message = err instanceof Error ? err.message : 'Signature verification failed.';
+      updateDidAuth({ busy: false });
       failDidAuth(DID_STEPS.SIGNATURE, message);
     }
   };
@@ -1028,30 +1181,18 @@ const AuthCard = () => {
             </div>
           )}
 
-          {/* ---- Phase C: Challenge (enter company password "BEL-2026") ---- */}
+          {/* ---- Phase C: Challenge (server-generated one-time challenge) ---- */}
           {didPhase === 'challenge' && !didAuth.done && !didAuth.failed && (
             <div className="space-y-2">
-              <div className="space-y-1.5">
-                <label className="text-sm font-semibold text-slate-700" htmlFor="challenge-input">
-                  Challenge Password
-                </label>
-                <input
-                  id="challenge-input"
-                  type="password"
-                  value={challengePassword}
-                  onChange={(e) => {
-                    setChallengePassword(e.target.value);
-                    if (didAuth.error) updateDidAuth({ error: '' });
-                  }}
-                  placeholder="Enter company challenge password"
-                  autoComplete="off"
-                  disabled={didAuth.busy}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm placeholder:text-slate-400 disabled:bg-slate-50"
-                />
+              <div className="rounded-xl bg-slate-50 border border-slate-200 p-3">
+                <p className="text-xs text-slate-600">
+                  A fresh, unpredictable challenge is generated securely by the backend for this
+                  sign-in. Your wallet will sign it to prove you control the private key of your DID.
+                </p>
               </div>
               <button
                 type="button"
-                onClick={verifyChallengePassword}
+                onClick={generateChallengeFromServer}
                 disabled={didAuth.busy}
                 className="w-full flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white font-medium py-3 px-4 rounded-xl transition-all duration-200 disabled:opacity-60"
               >
@@ -1060,7 +1201,7 @@ const AuthCard = () => {
                 ) : (
                   <ShieldCheck className="w-5 h-5" />
                 )}
-                {didAuth.busy ? 'Verifying…' : 'Verify Challenge'}
+                {didAuth.busy ? 'Generating Challenge…' : 'Generate Challenge'}
               </button>
             </div>
           )}
@@ -1085,6 +1226,23 @@ const AuthCard = () => {
                   <Fingerprint className="w-5 h-5" />
                 )}
                 {didAuth.busy ? 'Verifying Signature…' : 'Signature Verification'}
+              </button>
+
+              {/* TEMPORARY dev-only toggle — demonstrates the attacker path live. */}
+              <button
+                type="button"
+                onClick={() => setSimulateAttacker((v) => !v)}
+                disabled={didAuth.busy}
+                className="w-full text-[11px] font-semibold py-1 rounded-lg transition-colors disabled:opacity-50"
+                style={{
+                  color: simulateAttacker ? '#b45309' : '#64748b',
+                  background: simulateAttacker ? '#fffbeb' : 'transparent',
+                  border: simulateAttacker ? '1px solid #fcd34d' : '1px dashed #cbd5e1',
+                }}
+              >
+                {simulateAttacker
+                  ? '⚠ Simulating attacker — signing with a DIFFERENT private key (expect access denied)'
+                  : 'Dev: simulate attacker (sign with wrong private key)'}
               </button>
             </div>
           )}
