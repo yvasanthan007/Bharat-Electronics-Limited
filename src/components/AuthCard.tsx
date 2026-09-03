@@ -35,7 +35,7 @@ import {
 } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { findEmployeeByIdOrEmail, getEmployeeFromFirestore, type FirestoreEmployee } from '../services/firebaseEmployeeService';
-import { getDashboardRouteForRole } from '../services/employeeRbac';
+import { getDashboardRouteForRole, getDashboardLabelForRole } from '../services/employeeRbac';
 import { ethers } from 'ethers';
 
 
@@ -210,7 +210,7 @@ const AuthCard = () => {
   ): string => {
     const role = (session.role || 'Employee').trim();
     const isAdm = isAdminRole(role);
-    const route = getDashboardRouteForRole(isAdm ? 'Administrator' : role);
+    const route = getDashboardRouteForRole(role);
 
     const now = Date.now();
     persistEmployeeSession({
@@ -546,9 +546,9 @@ const AuthCard = () => {
     markDidStep(
       DID_STEPS.RBAC,
       'passed',
-      `Role from Firebase: ${session.role}${extras ? ` · ${extras}` : ''} → ${
-        isAdminRole(session.role) ? 'Admin dashboard (/bel)' : 'Employee portal (/user)'
-      }`
+      `Role from Firebase: ${session.role}${extras ? ` · ${extras}` : ''} → ${getDashboardLabelForRole(
+        session.role
+      )}`
     );
     markDidStep(DID_STEPS.DASHBOARD, 'active', 'Opening your authorized dashboard…');
 
@@ -718,19 +718,27 @@ const AuthCard = () => {
             }));
 
             setIsLoading(false);
-            if (isAdm) {
-              navigate('/bel');
-            } else {
-              navigate('/user');
-            }
+            navigate(getDashboardRouteForRole(roleName));
             return;
           }
         } catch {
           // If profile fetch fails, check role from token payload or default
         }
 
+        // If the profile fetch failed, derive the role from the JWT payload
+        // (best effort) so each role still lands on the correct dashboard.
+        let fallbackRole = 'User';
+        try {
+          const tokenPayload = data.data.token.split('.')[1] || '';
+          const decoded = atob(tokenPayload.replace(/-/g, '+').replace(/_/g, '/'));
+          const parsed = JSON.parse(decoded);
+          fallbackRole = parsed.role?.name || parsed.role || 'User';
+        } catch {
+          /* keep the default User portal */
+        }
+
         setIsLoading(false);
-        navigate('/bel');
+        navigate(getDashboardRouteForRole(fallbackRole));
         return;
       }
     } catch {
@@ -751,6 +759,14 @@ const AuthCard = () => {
       (cleanId === 'rithvik@bel.co.in' && password === 'bel123') ||
       (cleanId === 'user' && password === 'user123');
 
+    const isManagerMatch =
+      (cleanId === 'bel.manager@gmail.com' || cleanId === 'bel.manager@gmail' || cleanId === 'manager') &&
+      password === 'belmanager0';
+
+    const isAuditorMatch =
+      (cleanId === 'bel.auditor@gmail.com' || cleanId === 'bel.auditor@gmail' || cleanId === 'auditor') &&
+      password === 'belauditor0';
+
     if (isAdminMatch || isLegacyAdminMatch) {
       setTimeout(() => {
         setIsLoading(false);
@@ -769,6 +785,56 @@ const AuthCard = () => {
           did: 'did:bel:sov:admin01'
         }));
         navigate('/bel');
+      }, 400);
+      return;
+    }
+
+    if (isManagerMatch) {
+      setTimeout(() => {
+        setIsLoading(false);
+        const managerUser = {
+          name: 'BEL Manager',
+          email: cleanId || 'bel.manager@gmail.com',
+          role: 'Manager',
+          employeeId: 'BEL-MGR-0001',
+          did: 'did:bel:sov:manager01'
+        };
+        localStorage.setItem('bel_user', JSON.stringify(managerUser));
+        localStorage.setItem('user', JSON.stringify({
+          firstName: 'BEL',
+          lastName: 'Manager',
+          department: 'Operations',
+          email: cleanId || 'bel.manager@gmail.com',
+          employeeId: 'BEL-MGR-0001',
+          role: { name: 'MANAGER' },
+          did: 'did:bel:sov:manager01'
+        }));
+        navigate('/manager');
+      }, 400);
+      return;
+    }
+
+    if (isAuditorMatch) {
+      setTimeout(() => {
+        setIsLoading(false);
+        const auditorUser = {
+          name: 'BEL Auditor',
+          email: cleanId || 'bel.auditor@gmail.com',
+          role: 'Auditor',
+          employeeId: 'BEL-AUD-0001',
+          did: 'did:bel:sov:auditor01'
+        };
+        localStorage.setItem('bel_user', JSON.stringify(auditorUser));
+        localStorage.setItem('user', JSON.stringify({
+          firstName: 'BEL',
+          lastName: 'Auditor',
+          department: 'Audit & Compliance',
+          email: cleanId || 'bel.auditor@gmail.com',
+          employeeId: 'BEL-AUD-0001',
+          role: { name: 'AUDITOR' },
+          did: 'did:bel:sov:auditor01'
+        }));
+        navigate('/auditor');
       }, 400);
       return;
     }
@@ -1006,16 +1072,21 @@ const AuthCard = () => {
     }
   };
 
-  const setDemoCredentials = (type: 'admin' | 'user') => {
+  const setDemoCredentials = (type: 'admin' | 'manager' | 'auditor' | 'user') => {
     setError('');
+    setIsSignUp(false);
     if (type === 'admin') {
       setIdentifier('bel.admin@gmail.com');
       setPassword('beladmin0');
-      setIsSignUp(false);
+    } else if (type === 'manager') {
+      setIdentifier('bel.manager@gmail.com');
+      setPassword('belmanager0');
+    } else if (type === 'auditor') {
+      setIdentifier('bel.auditor@gmail.com');
+      setPassword('belauditor0');
     } else {
       setIdentifier('bel001');
       setPassword('bel123');
-      setIsSignUp(false);
     }
   };
 
@@ -1270,6 +1341,22 @@ const AuthCard = () => {
             >
               <Shield className="w-3 h-3 text-blue-600" />
               Admin
+            </button>
+            <button
+              type="button"
+              onClick={() => setDemoCredentials('manager')}
+              className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg font-bold text-violet-700 shadow-2xs transition-all flex items-center gap-1 cursor-pointer"
+            >
+              <Shield className="w-3 h-3 text-violet-600" />
+              Manager
+            </button>
+            <button
+              type="button"
+              onClick={() => setDemoCredentials('auditor')}
+              className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg font-bold text-amber-700 shadow-2xs transition-all flex items-center gap-1 cursor-pointer"
+            >
+              <Shield className="w-3 h-3 text-amber-600" />
+              Auditor
             </button>
             <button
               type="button"

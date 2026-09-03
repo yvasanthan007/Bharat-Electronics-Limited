@@ -4,6 +4,10 @@ import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import UserSidebar from './components/user/UserSidebar';
 import UserHeader from './components/user/UserHeader';
+import ManagerSidebar from './components/manager/ManagerSidebar';
+import ManagerHeader from './components/manager/ManagerHeader';
+import AuditorSidebar from './components/auditor/AuditorSidebar';
+import AuditorHeader from './components/auditor/AuditorHeader';
 import Dashboard from './pages/Dashboard';
 import Reports from './pages/Reports';
 import Settings from './pages/Settings';
@@ -19,15 +23,23 @@ import MyIdentity from './pages/user/MyIdentity';
 import MyAssets from './pages/user/MyAssets';
 import RequestAccess from './pages/user/RequestAccess';
 import MyActivity from './pages/user/MyActivity';
+import ManagerDashboard from './pages/manager/ManagerDashboard';
+import AuditorDashboard from './pages/auditor/AuditorDashboard';
+import {
+  normalizeBelRole,
+  getDashboardRouteForRole,
+  getRouteForRoleKey,
+  type BelRoleKey,
+} from './services/employeeRbac';
 
-// Helper to check current authenticated role
-const getAuthUserRole = (): { isAuthenticated: boolean; isAdmin: boolean } => {
+// Helper to check the current authenticated role
+const getAuthUserRole = (): { isAuthenticated: boolean; role: BelRoleKey } => {
   try {
     const belUserStr = localStorage.getItem('bel_user');
     const userStr = localStorage.getItem('user');
 
     if (!belUserStr && !userStr) {
-      return { isAuthenticated: false, isAdmin: false };
+      return { isAuthenticated: false, role: 'EMPLOYEE' };
     }
 
     let role = '';
@@ -39,26 +51,53 @@ const getAuthUserRole = (): { isAuthenticated: boolean; isAdmin: boolean } => {
       role = u.role?.name || u.role || '';
     }
 
-    const r = role.trim().toUpperCase();
-    const isAdmin = r === 'ADMIN' || r === 'ADMINISTRATOR' || r === 'SECURITY OFFICER';
-
-    return { isAuthenticated: true, isAdmin };
+    return { isAuthenticated: true, role: normalizeBelRole(role) };
   } catch {
-    return { isAuthenticated: false, isAdmin: false };
+    return { isAuthenticated: false, role: 'EMPLOYEE' };
   }
 };
 
-// Guard for Admin Routes (/bel/*)
+/** Guard for Admin Routes (/bel/*). */
 const AdminRoute = ({ children }: { children: React.ReactNode }) => {
-  const { isAuthenticated, isAdmin } = getAuthUserRole();
+  const { isAuthenticated, role } = getAuthUserRole();
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
 
-  if (!isAdmin) {
-    // If regular user tries to access admin panel, redirect to User portal
-    return <Navigate to="/user" replace />;
+  if (role !== 'ADMIN') {
+    // Everyone else is redirected to their own role dashboard.
+    return <Navigate to={getDashboardRouteForRole(role)} replace />;
+  }
+
+  return <>{children}</>;
+};
+
+/** Guard for Manager Routes (/manager/*). */
+const ManagerRoute = ({ children }: { children: React.ReactNode }) => {
+  const { isAuthenticated, role } = getAuthUserRole();
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (role !== 'MANAGER') {
+    return <Navigate to={getDashboardRouteForRole(role)} replace />;
+  }
+
+  return <>{children}</>;
+};
+
+/** Guard for Auditor Routes (/auditor/*). */
+const AuditorRoute = ({ children }: { children: React.ReactNode }) => {
+  const { isAuthenticated, role } = getAuthUserRole();
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (role !== 'AUDITOR') {
+    return <Navigate to={getDashboardRouteForRole(role)} replace />;
   }
 
   return <>{children}</>;
@@ -75,23 +114,30 @@ const UserRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
-// Root route intelligent redirector
+// Root route intelligent redirector — every role lands on its own dashboard.
 const RootRedirect = () => {
-  const { isAuthenticated, isAdmin } = getAuthUserRole();
+  const { isAuthenticated, role } = getAuthUserRole();
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
 
-  return <Navigate to={isAdmin ? '/bel' : '/user'} replace />;
+  return <Navigate to={getRouteForRoleKey(role)} replace />;
 };
 
-const BelLayout = () => (
+const ComingSoon = () => (
+  <div className="flex items-center justify-center h-full text-slate-500 font-medium">
+    Page Coming Soon
+  </div>
+);
+
+/** Shared shell: left rail (sidebar) + top bar (header) + routed content. */
+const RoleLayout = ({ sidebar, header }: { sidebar: React.ReactNode; header: React.ReactNode }) => (
   <div className="flex h-screen bg-slate-50 overflow-hidden">
-    <Sidebar />
+    {sidebar}
 
     <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-      <Header />
+      {header}
 
       <main className="flex-1 overflow-y-auto p-6">
         <Outlet />
@@ -100,17 +146,10 @@ const BelLayout = () => (
   </div>
 );
 
-const UserLayout = () => (
-  <div className="flex h-screen bg-slate-50 overflow-hidden">
-    <UserSidebar />
-    <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-      <UserHeader />
-      <main className="flex-1 overflow-y-auto p-6">
-        <Outlet />
-      </main>
-    </div>
-  </div>
-);
+const BelLayout = () => <RoleLayout sidebar={<Sidebar />} header={<Header />} />;
+const UserLayout = () => <RoleLayout sidebar={<UserSidebar />} header={<UserHeader />} />;
+const ManagerLayout = () => <RoleLayout sidebar={<ManagerSidebar />} header={<ManagerHeader />} />;
+const AuditorLayout = () => <RoleLayout sidebar={<AuditorSidebar />} header={<AuditorHeader />} />;
 
 function App() {
   return (
@@ -149,6 +188,38 @@ function App() {
           />
         </Route>
 
+        {/* Manager Application under /manager with ManagerRoute guard */}
+        <Route
+          path="/manager"
+          element={
+            <ManagerRoute>
+              <ManagerLayout />
+            </ManagerRoute>
+          }
+        >
+          <Route index element={<ManagerDashboard />} />
+          <Route path="dashboard" element={<ManagerDashboard />} />
+          <Route path="access-control" element={<AccessControl />} />
+          <Route path="audit-trail" element={<AuditTrail />} />
+          <Route path="reports" element={<Reports />} />
+          <Route path="*" element={<ComingSoon />} />
+        </Route>
+
+        {/* Auditor application under /auditor with AuditorRoute guard */}
+        <Route
+          path="/auditor"
+          element={
+            <AuditorRoute>
+              <AuditorLayout />
+            </AuditorRoute>
+          }
+        >
+          <Route index element={<AuditorDashboard />} />
+          <Route path="dashboard" element={<AuditorDashboard />} />
+          <Route path="audit-trail" element={<AuditTrail />} />
+          <Route path="reports" element={<Reports />} />
+          <Route path="*" element={<ComingSoon />} />
+        </Route>
         {/* User-facing portal under /user with UserRoute guard */}
         <Route
           path="/user"
@@ -168,6 +239,8 @@ function App() {
 
         {/* Aliases & Direct Redirects */}
         <Route path="/user-dashboard" element={<Navigate to="/user" replace />} />
+        <Route path="/manager-dashboard" element={<Navigate to="/manager" replace />} />
+        <Route path="/auditor-dashboard" element={<Navigate to="/auditor" replace />} />
         <Route path="/dashboard" element={<Navigate to="/bel/dashboard" replace />} />
         <Route path="/digital-assets" element={<Navigate to="/bel/digital-assets" replace />} />
         <Route path="/transactions" element={<Navigate to="/bel/transactions" replace />} />
