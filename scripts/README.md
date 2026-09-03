@@ -125,4 +125,51 @@ python scripts\view_employees.py --count            # total count only
 python scripts\verify_import.py   # count + role distribution + field samples
 ```
 
+---
+
+# DID Provisioning for Role-Based Redirect (`provision-did.mjs`)
+
+The RBAC routing (Admin→`/bel`, Manager→`/manager`, Auditor→`/auditor`,
+User→`/user`) is already live in the app. Every employee can only complete the
+DID signature-verification login if their `employees/{id}` doc carries a DID
+(`did`, `publicKey`, `walletAddress`, `didStatus: Created`). Employees whose
+Excel row had no DID (e.g. `BEL1015`/`vijay.krishnan15@bel.co.in`) cannot pass
+the signature step until one is issued.
+
+`provision-did.mjs` issues missing DIDs in bulk (public data **only**):
+- generates an ethers keypair identical to the app's DID engine,
+- PATCHes **only public fields** (`did`, `walletAddress`, `walletId`,
+  `publicKey`, `keyType`, `didStatus`, `didCreatedAt`, `status`, `updatedAt`)
+  into `employees/{employeeId}` — it never overwrites an existing DID and
+  preserves the authoritative `role`,
+- never writes a private key to Firestore, and
+- emits a chmod-0600 private-key artifact into the gitignored
+  `scripts/.did-keys/<employeeId>.json` for import into the employee's
+  browser wallet / MetaMask.
+
+> **After provisioning, the employee still needs their private key in the
+> browser that will log in.** The DID flow signs a challenge with the private
+> key that lives in that browser (IndexedDB secure key storage or a connected
+> MetaMask wallet). Import the generated private key from
+> `scripts/.did-keys/<employeeId>.json` into MetaMask (or store it via the
+> Admin → Create Identity modal on that device) before completing the login.
+
+```powershell
+# DRY-RUN (default, read-only)
+node scripts/provision-did.mjs --role=Manager
+node scripts/provision-did.mjs --ids=BEL1015,BEL1116
+
+# WRITE to LIVE Firestore (requires a Bearer token, see ENV note)
+#   Set FIREBASE_ACCESS_TOKEN to a service-account or user access token
+#   (obtain one from Firebase Console → Service accounts → Generate key, then
+#   use a token helper such as `gcloud auth application-default print-access-token`).
+node scripts/provision-did.mjs --all --live --commit
+node scripts/provision-did.mjs --role=Manager --live --commit
+node scripts/provision-did.mjs --ids=BEL1015 --live --commit
+
+# WRITE to the LOCAL Firestore emulator
+node scripts/provision-did.mjs --emulator=8080 --commit
+```
+
+> `--commit` is required for any write. Without it the tool performs a dry run.
 > local emulator (272/272 documents).

@@ -40,3 +40,6 @@ firebase-adminsdk*.json
 serviceAccount*.json
 .firebase/
 firebase-debug.log
+
+# DID provisioning private-key artifacts (NEVER commit)
+scripts/.did-keys/
