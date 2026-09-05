@@ -8,8 +8,6 @@ import {
   Mail,
   UserCircle,
   Fingerprint,
-  Shield,
-  User,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -67,19 +65,6 @@ const getFirebaseErrorMessage = (err: unknown): string => {
       return msg.replace('Firebase: ', '');
     }
   }
-};
-
-type DidLoginPhase = 'idle' | 'challenging' | 'signing' | 'verifying' | 'success';
-
-interface StepView { label: string; passed: boolean; detail: string }
-interface OutcomeView { ok: boolean; title: string; message: string; steps: StepView[] }
-
-const PHASE_LABELS: Record<DidLoginPhase, string> = {
-  idle: 'Authenticate DID',
-  challenging: 'Generating one-time challenge…',
-  signing: 'Signing with secure key storage…',
-  verifying: 'Verifying against DID public key…',
-  success: 'Identity proven ✓',
 };
 
 /* ------------------------------------------------------------------ */
@@ -152,15 +137,11 @@ const AuthCard = () => {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [didInput, setDidInput] = useState('');
-  const [loginPhase, setLoginPhase] = useState<DidLoginPhase>('idle');
-  const [outcome, setOutcome] = useState<OutcomeView | null>(null);
   const [didAuth, setDidAuth] = useState<DidAuthState | null>(null);
   const [didPhase, setDidPhase] = useState<'did' | 'wallet' | 'challenge' | 'signature' | 'done'>('did');
   /** TEMPORARY dev toggle — signs the challenge with a RANDOM (attacker) key. */
   const [simulateAttacker, setSimulateAttacker] = useState(false);
   const navigate = useNavigate();
-
-  const isDidBusy = loginPhase !== 'idle' && loginPhase !== 'success';
 
   const isAdminRole = (roleStr: string): boolean => {
     const r = (roleStr || '').trim().toUpperCase();
@@ -949,151 +930,9 @@ const AuthCard = () => {
     }
   };
 
-  /**
-   * DID challenge/response authentication:
-   * Employee enters DID → backend generates one-time challenge →
-   * secure key storage signs it → backend verifies the signature →
-   * valid identity is allowed to continue.
-   */
-  const handleDidLogin = async () => {
-    setError('');
-    setOutcome(null);
-
-    const did = didInput.trim();
-    if (!did) {
-      setOutcome({
-        ok: false,
-        title: 'Access denied',
-        message: 'Enter your DID to continue.',
-        steps: [],
-      });
-      return;
-    }
-
-    // ------------------------------------------------------------------
-    // STEP 1 — Verify the DID against Firebase Firestore.
-    // Find the employee whose stored `did` matches the entered DID.
-    // (Exact match → lowercase retry → bare wallet-address retry.)
-    // The demo employee is provisioned first (idempotent) so the demo DID
-    // resolves on first run.
-    // ------------------------------------------------------------------
-    setLoginPhase('challenging');
-    try {
-      await ensureDemoEmployeeRegistered();
-    } catch (demoErr) {
-      console.warn('[AuthCard] Demo employee provisioning skipped:', demoErr);
-    }
-    let matchedEmployee: FirestoreEmployee | null = null;
-    try {
-      matchedEmployee = await getEmployeeFromFirestore(did);
-      if (!matchedEmployee && did.toLowerCase() !== did) {
-        matchedEmployee = await getEmployeeFromFirestore(did.toLowerCase());
-      }
-      if (!matchedEmployee) {
-        const addressMatch = did.match(/0x[0-9a-fA-F]{40}/);
-        if (addressMatch) {
-          matchedEmployee = await getEmployeeFromFirestore(addressMatch[0].toLowerCase());
-        }
-      }
-    } catch (lookupErr) {
-      console.warn('[AuthCard] Firestore DID lookup failed:', lookupErr);
-    }
-
-    // ------------------------------------------------------------------
-    // STEP 2 — SECURITY: a DID existing in the registry is NOT proof of
-    // identity ("if DID exists => authenticated" is never accepted).
-    // Ownership must be proven by signing a fresh single-use challenge
-    // with the wallet key whose PUBLIC key is registered in Firebase for
-    // that DID. The signature is verified server-side.
-    // ------------------------------------------------------------------
-    if (!matchedEmployee) {
-      setLoginPhase('idle');
-      setOutcome({
-        ok: false,
-        title: 'Access denied',
-        message:
-          'Invalid or unregistered DID — no matching employee found in the BEL identity registry.',
-        steps: [],
-      });
-      return;
-    }
-
-    // ------------------------------------------------------------------
-    // STEP 3 — Real challenge/response flow (wallet key signature proof):
-    // server issues single-use challenge (stored in Firebase) → the
-    // employee's EXISTING wallet signs it (private key never leaves the
-    // device) → server verifies the signature against the DID public key
-    // stored in Firebase → challenge atomically marked used.
-    // ------------------------------------------------------------------
-    try {
-      // 3a — server-issued single-use challenge bound to this DID
-      const issued = await issueDidChallenge(matchedEmployee);
-
-      setLoginPhase('signing');
-      // 3b — wallet signature (secure key storage → browser wallet → demo key)
-      const signature = await signChallengeForDID(issued.did, issued.challenge);
-
-      setLoginPhase('verifying');
-      // 3c — server-side verification + atomic single-use consume
-      const result = await verifyDidChallengeResponse({
-        challengeId: issued.challengeId,
-        did: issued.did,
-        signature,
-      });
-
-      if (result.success && result.session) {
-        setLoginPhase('success');
-        setOutcome({
-          ok: true,
-          title: 'Login successful',
-          message: `${result.session.name} · DID authenticated via challenge-response. Redirecting…`,
-          steps: result.steps,
-        });
-
-        const route = applyDidAuthSession(result.session, result.session.email || '', undefined);
-        window.setTimeout(() => navigate(route), 900);
-      } else {
-        setLoginPhase('idle');
-        setOutcome({
-          ok: false,
-          title: 'Access denied',
-          message: result.error ?? 'Verification failed.',
-          steps: result.steps,
-        });
-      }
-    } catch (err: unknown) {
-      setLoginPhase('idle');
-      setOutcome({
-        ok: false,
-        title: 'Access denied',
-        message: err instanceof Error ? err.message : 'Authentication failed.',
-        steps: [],
-      });
-    }
-  };
-
-  const setDemoCredentials = (type: 'admin' | 'manager' | 'auditor' | 'user') => {
-    setError('');
-    setIsSignUp(false);
-    if (type === 'admin') {
-      setIdentifier('bel.admin@gmail.com');
-      setPassword('beladmin0');
-    } else if (type === 'manager') {
-      setIdentifier('bel.manager@gmail.com');
-      setPassword('belmanager0');
-    } else if (type === 'auditor') {
-      setIdentifier('bel.auditor@gmail.com');
-      setPassword('belauditor0');
-    } else {
-      setIdentifier('bel001');
-      setPassword('bel123');
-    }
-  };
-
   /** Quick-fill helper for demos/judges. */
   const fillDemoDid = () => {
     setDidInput(getDemoEmployeeDID());
-    setOutcome(null);
     setError('');
   };
 
@@ -1329,137 +1168,6 @@ const AuthCard = () => {
         </div>
       ) : (
       <>
-      {/* Demo Credentials Quick Switcher */}
-      {!isSignUp && (
-        <div className="mb-5 p-2.5 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between gap-2 text-xs">
-          <span className="text-[11px] font-bold text-slate-500">Quick Demo Login:</span>
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => setDemoCredentials('admin')}
-              className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg font-bold text-blue-700 shadow-2xs transition-all flex items-center gap-1 cursor-pointer"
-            >
-              <Shield className="w-3 h-3 text-blue-600" />
-              Admin
-            </button>
-            <button
-              type="button"
-              onClick={() => setDemoCredentials('manager')}
-              className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg font-bold text-violet-700 shadow-2xs transition-all flex items-center gap-1 cursor-pointer"
-            >
-              <Shield className="w-3 h-3 text-violet-600" />
-              Manager
-            </button>
-            <button
-              type="button"
-              onClick={() => setDemoCredentials('auditor')}
-              className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg font-bold text-amber-700 shadow-2xs transition-all flex items-center gap-1 cursor-pointer"
-            >
-              <Shield className="w-3 h-3 text-amber-600" />
-              Auditor
-            </button>
-            <button
-              type="button"
-              onClick={() => setDemoCredentials('user')}
-              className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg font-bold text-emerald-700 shadow-2xs transition-all flex items-center gap-1 cursor-pointer"
-            >
-              <User className="w-3 h-3 text-emerald-600" />
-              User Portal
-            </button>
-          </div>
-        </div>
-      )}
-
-      {!isSignUp && (
-        <>
-          {/* Step 1 — Employee enters their DID */}
-          <div className="space-y-1.5">
-            <label className="text-sm font-semibold text-slate-700" htmlFor="did-input">
-              Decentralized Identifier (DID)
-            </label>
-            <div className="relative">
-              <input
-                id="did-input"
-                type="text"
-                value={didInput}
-                onChange={(e) => setDidInput(e.target.value)}
-                placeholder="did:ethr:0x…"
-                autoComplete="off"
-                spellCheck={false}
-                disabled={isDidBusy}
-                className="w-full px-4 py-3 pr-28 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm font-mono placeholder:text-slate-400 disabled:bg-slate-50"
-              />
-              <button
-                type="button"
-                onClick={fillDemoDid}
-                disabled={isDidBusy}
-                title="Fill the pre-provisioned demo employee DID"
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded-lg transition-colors disabled:opacity-50"
-              >
-                Use demo DID
-              </button>
-            </div>
-          </div>
-
-          {/* Steps 2-4 — challenge → sign → verify → LOGIN / DENY */}
-          <button
-            onClick={handleDidLogin}
-            disabled={isDidBusy}
-            className="w-full flex items-center justify-center gap-2 mt-3 bg-slate-900 hover:bg-slate-800 text-white font-medium py-3 px-4 rounded-xl transition-all duration-200 disabled:opacity-60"
-          >
-            {isDidBusy ? (
-              <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-            ) : (
-              <Fingerprint className="w-5 h-5" />
-            )}
-            {PHASE_LABELS[loginPhase]}
-          </button>
-
-          {/* Valid? YES → LOGIN · NO → DENY (with step trace) */}
-          {outcome && (
-            <div
-              className={`mt-3 rounded-xl border p-3 ${
-                outcome.ok
-                  ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                  : 'bg-red-50 border-red-200 text-red-700'
-              }`}
-            >
-              <p className="font-semibold text-sm flex items-center gap-1.5">
-                {outcome.ok ? (
-                  <CheckCircle2 className="w-4 h-4 shrink-0" />
-                ) : (
-                  <XCircle className="w-4 h-4 shrink-0" />
-                )}
-                {outcome.title}
-              </p>
-              <p className="text-xs mt-0.5">{outcome.message}</p>
-              {outcome.steps.length > 0 && (
-                <ul className="mt-2 space-y-1 border-t border-current/10 pt-2">
-                  {outcome.steps.map((s) => (
-                    <li key={s.label} className="flex items-start gap-1.5 text-[11px] leading-snug">
-                      {s.passed ? (
-                        <CheckCircle2 className="w-3 h-3 mt-0.5 shrink-0 opacity-70" />
-                      ) : (
-                        <XCircle className="w-3 h-3 mt-0.5 shrink-0 opacity-70" />
-                      )}
-                      <span>
-                        <span className="font-semibold">{s.label}</span> — {s.detail}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
-
-          <div className="relative flex py-4 items-center">
-            <div className="flex-grow border-t border-slate-200"></div>
-            <span className="flex-shrink-0 mx-4 text-slate-400 text-xs font-medium uppercase tracking-wider">or sign in with id</span>
-            <div className="flex-grow border-t border-slate-200"></div>
-          </div>
-        </>
-      )}
-
       <form onSubmit={handleAuth} className="space-y-3.5">
         {error && (
           <div className="p-3 bg-red-50 border border-red-100 text-red-600 text-xs rounded-xl flex items-start gap-2">
@@ -1539,7 +1247,7 @@ const AuthCard = () => {
 
         <button
           type="submit"
-          disabled={isLoading || isDidBusy}
+          disabled={isLoading}
           className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-xl transition-all duration-200 shadow-sm shadow-blue-600/20 flex items-center justify-center gap-2 mt-4 disabled:opacity-60"
         >
           {isLoading ? (
