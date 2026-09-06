@@ -7,7 +7,11 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "compile:contract": "npm --prefix contracts run compile",
+    "deploy:contract:amoy": "npm --prefix contracts run deploy:amoy",
+    "sync:artifact": "node scripts/sync-nft-artifact.mjs",
+    "check:nft": "node scripts/verify-nft.mjs"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",

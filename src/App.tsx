@@ -13,6 +13,7 @@ import Reports from './pages/Reports';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
 import DigitalAssets from './pages/DigitalAssets';
+import AssetManagement from './pages/AssetManagement';
 import Transactions from './pages/Transactions';
 import Identities from './pages/Identities';
 import AccessControl from './pages/AccessControl';
@@ -171,6 +172,7 @@ function App() {
           <Route index element={<Dashboard />} />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="digital-assets" element={<DigitalAssets />} />
+          <Route path="asset-management" element={<AssetManagement />} />
           <Route path="transactions" element={<Transactions />} />
           <Route path="identities" element={<Identities />} />
           <Route path="access-control" element={<AccessControl />} />

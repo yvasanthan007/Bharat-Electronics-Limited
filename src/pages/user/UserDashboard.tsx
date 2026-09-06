@@ -9,6 +9,7 @@ import {
   getDashboardKPI, getRecentActivities,
   type DashboardKPI, type ActivityItem,
 } from '../../services/userPortal';
+import MyNftAssetsPanel from '../../components/assets/nft/MyNftAssetsPanel';
 
 const statusStyle: Record<string, string> = {
   Success: 'bg-green-50 text-green-700 border border-green-200',
@@ -118,6 +119,9 @@ export default function UserDashboard() {
           </div>
         ))}
       </div>
+
+      {/* NEW — My Assets: live NFT ownership panel (blockchain ownerOf check) */}
+      <MyNftAssetsPanel variant="compact" />
 
       {/* Recent Activity + Quick Actions */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Package, ExternalLink } from 'lucide-react';
 import { getUserAssets, type UserAsset } from '../../services/userPortal';
+import MyNftAssetsPanel from '../../components/assets/nft/MyNftAssetsPanel';
 
 const typeBg: Record<string, string> = {
   Repository:    'bg-blue-50 text-blue-700',
@@ -54,6 +55,9 @@ export default function MyAssets() {
           {assets.length} Total Assets
         </div>
       </div>
+
+      {/* NEW — Live NFT ownership of BEL assets (blockchain ownerOf check) */}
+      <MyNftAssetsPanel variant="full" />
 
       {/* Summary cards */}
       <div className="grid grid-cols-3 gap-4">

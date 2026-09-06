@@ -114,5 +114,21 @@ service cloud.firestore {
                     && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['used', 'usedAt']);
       allow delete: if false;
     }
+
+    // BEL ASSETS: NFT asset registry (application metadata + blockchain refs).
+    // The ERC-721 contract on the testnet is the AUTHORITATIVE record of NFT
+    // ownership — ownerWallet/ownerDID here are display caches only. No
+    // private keys may ever be written, and documents are never deleted so
+    // the mint/transfer/burn reference history survives (tamper-evidence
+    // comes from the chain itself).
+    match /assets/{assetId} {
+      allow read: if true; // ownership truth lives on-chain, not here
+      allow create, update: if isAuthenticated()
+                            && !hasPrivateKey(request.resource.data)
+                            && request.resource.data.assetId == assetId
+                            && request.resource.data.assetType is string
+                            && request.resource.data.status in ['Created', 'Active', 'Revoked'];
+      allow delete: if false; // preserve the asset reference history
+    }
   }
 }

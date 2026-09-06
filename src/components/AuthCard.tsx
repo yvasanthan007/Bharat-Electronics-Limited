@@ -34,6 +34,7 @@ import {
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { findEmployeeByIdOrEmail, getEmployeeFromFirestore, type FirestoreEmployee } from '../services/firebaseEmployeeService';
 import { getDashboardRouteForRole, getDashboardLabelForRole } from '../services/employeeRbac';
+import { verifySessionNftOwnership } from '../services/blockchain/nftVerification';
 import { ethers } from 'ethers';
 
 
@@ -110,7 +111,8 @@ const DID_STEPS = {
   SIGNATURE: 5,
   AUTHENTICATED: 6,
   RBAC: 7,
-  DASHBOARD: 8,
+  NFT: 8,
+  DASHBOARD: 9,
 } as const;
 
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000; // 8 hours (matches employeeAuth)
@@ -125,6 +127,7 @@ function newDidAuthSteps(): DidAuthViewStep[] {
     { label: 'Signature Verification', detail: 'Server-side check against the DID public key', status: 'pending' },
     { label: 'DID Authenticated', detail: '', status: 'pending' },
     { label: 'RBAC', detail: '', status: 'pending' },
+    { label: 'NFT Ownership', detail: 'Live ownerOf() check of your asset NFTs', status: 'pending' },
     { label: 'Dashboard', detail: '', status: 'pending' },
   ];
 }
@@ -505,8 +508,14 @@ const AuthCard = () => {
    * Shared completion path — runs ONLY after a verifier (Cloud Function or
    * the local fallback verifier) has cryptographically validated the wallet
    * signature. The session role always comes from the verifier (Firebase).
+   *
+   * AFTER RBAC the flow now also performs the NFT ownership verification:
+   * every asset NFT assigned (per Firestore reference) to this wallet is
+   * checked with a LIVE ownerOf() call against the ERC-721 contract. This
+   * check NEVER invalidates the identity/RBAC session — a failed check only
+   * denies the NFT-protected asset/resource.
    */
-  const completeDidAuth = (session: CloudSession, verifiedBy: string) => {
+  const completeDidAuth = async (session: CloudSession, verifiedBy: string) => {
     markDidStep(
       DID_STEPS.SIGNATURE,
       'passed',
@@ -531,6 +540,47 @@ const AuthCard = () => {
         session.role
       )}`
     );
+
+    // — NEW: post-RBAC NFT ownership verification (non-blocking for auth) —
+    markDidStep(DID_STEPS.NFT, 'active', 'Checking asset NFT ownership on the blockchain…');
+    try {
+      const nft = await verifySessionNftOwnership(session.walletAddress, session.did);
+      try {
+        sessionStorage.setItem('bel_nft_verification', JSON.stringify(nft));
+      } catch {
+        /* storage unavailable — portal pages will verify live instead */
+      }
+      if (nft.totalAssets === 0) {
+        markDidStep(
+          DID_STEPS.NFT,
+          'passed',
+          'No NFT-protected assets assigned to this identity'
+        );
+      } else if (nft.allVerified) {
+        const owned = nft.results
+          .filter((r) => r.ownership.verified)
+          .map((r) => `${r.assetId} #${r.tokenId}`)
+          .join(', ');
+        markDidStep(
+          DID_STEPS.NFT,
+          'passed',
+          `Blockchain confirms ownership of ${nft.verifiedCount}/${nft.totalAssets} asset NFT(s): ${owned}`
+        );
+      } else {
+        markDidStep(
+          DID_STEPS.NFT,
+          'failed',
+          'Asset ownership could not be verified — NFT-protected assets are denied. Your identity & RBAC session remains active.'
+        );
+      }
+    } catch {
+      markDidStep(
+        DID_STEPS.NFT,
+        'failed',
+        'Asset ownership could not be verified (blockchain unreachable). Your identity & RBAC session remains active.'
+      );
+    }
+
     markDidStep(DID_STEPS.DASHBOARD, 'active', 'Opening your authorized dashboard…');
 
     const route = applyDidAuthSession(session, didAuth!.email, didAuth!.authUid);
@@ -600,7 +650,7 @@ const AuthCard = () => {
       });
       if (cloud.ok) {
         if (cloud.data.session) {
-          completeDidAuth(cloud.data.session, 'Cloud Function');
+          void completeDidAuth(cloud.data.session, 'Cloud Function');
         } else {
           updateDidAuth({ busy: false });
           failDidAuth(DID_STEPS.SIGNATURE, 'DID verification failed.');
@@ -623,7 +673,7 @@ const AuthCard = () => {
         signature,
       });
       if (result.success && result.session) {
-        completeDidAuth(result.session, 'local verifier (backend offline)');
+        void completeDidAuth(result.session, 'local verifier (backend offline)');
         return;
       }
       updateDidAuth({ busy: false });
